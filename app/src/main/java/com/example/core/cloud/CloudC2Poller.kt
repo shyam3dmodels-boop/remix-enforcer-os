@@ -56,16 +56,36 @@ class CloudC2Poller private constructor(private val context: Context) {
 
         pollingJob = scope.launch {
             var consecutiveErrors = 0
+            var idleCycles = 0
+            // Ensure real-time Firestore commands listener is active as primary instant C2 push channel
+            try {
+                FirestoreSyncManager.getInstance(context).startListeningForRemoteCommands()
+            } catch (e: Exception) {
+                Log.w(TAG, "Notice starting Firestore commands listener: ${e.message}")
+            }
+
             while (isActive) {
                 try {
                     val hadCommands = pollAndExecute()
                     consecutiveErrors = 0
                     _lastPolledTime.value = System.currentTimeMillis()
-                    val delayMs = if (hadCommands) 1000L else 2500L
+                    val delayMs = if (hadCommands) {
+                        idleCycles = 0
+                        1000L
+                    } else {
+                        idleCycles++
+                        // Exponential idle backoff: 5s -> 15s -> 30s -> 60s to prevent battery drain
+                        when {
+                            idleCycles < 3 -> 5000L
+                            idleCycles < 6 -> 15000L
+                            idleCycles < 12 -> 30000L
+                            else -> 60000L
+                        }
+                    }
                     delay(delayMs)
                 } catch (e: Exception) {
                     consecutiveErrors++
-                    val backoffMs = (consecutiveErrors * 2000L).coerceAtMost(10000L)
+                    val backoffMs = (consecutiveErrors * 5000L).coerceAtMost(60000L)
                     Log.w(TAG, "Cloud C2 poll error (attempt $consecutiveErrors): ${e.message}. Retrying in ${backoffMs}ms")
                     delay(backoffMs)
                 }

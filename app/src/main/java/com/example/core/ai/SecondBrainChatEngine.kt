@@ -249,7 +249,7 @@ class SecondBrainChatEngine private constructor(private val context: Context) {
             return "🔑 [${p.uppercase()} Key Required]: Please tap the Settings icon ⚙️ at the top right of this chat and enter your ${p.replaceFirstChar { it.uppercase() }} API key to enable ${model}."
         }
 
-        return "Understood. Your request is indexed and synced across your Secondary Brain Room Database and Cloud Firestore."
+        return "⚠️ [Cloud AI Unreachable]: Failed to generate response from ${p.uppercase()} ($model). Please verify your internet connection or check your API key pool in Chat Settings."
     }
 
     private fun callClaudeDirect(apiKey: String, model: String, userPrompt: String, systemPrompt: String): String {

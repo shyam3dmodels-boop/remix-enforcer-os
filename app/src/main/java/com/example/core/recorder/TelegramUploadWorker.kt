@@ -377,8 +377,8 @@ class TelegramUploadWorker(
 
             val inputData = Data.Builder()
                 .putString(KEY_FILE_PATH, filePath)
-                .putString(KEY_LECTURE_TITLE, lectureTitle)
-                .putString(KEY_SUBJECT, subject)
+                .putString(KEY_LECTURE_TITLE, lectureTitle.take(150))
+                .putString(KEY_SUBJECT, subject.take(80))
                 .putInt(KEY_CHUNK_INDEX, chunkIndex)
                 .putLong(KEY_DURATION_SEC, durationSec)
                 .putLong(KEY_LECTURE_ID, lectureId)
