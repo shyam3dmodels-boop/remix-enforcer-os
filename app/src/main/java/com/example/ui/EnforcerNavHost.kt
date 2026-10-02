@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.BatteryFull
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.SignalCellularAlt
 import androidx.compose.material.icons.filled.SmartToy
@@ -71,6 +72,7 @@ import com.example.ui.screens.ai.ChatAiScreen
 import com.example.ui.screens.alarm.AlarmScreen
 import com.example.ui.screens.claw.PrivateAgentStudioScreen
 import com.example.ui.screens.dashboard.DashboardScreen
+import com.example.ui.screens.profile.ProfileSettingsScreen
 import com.example.ui.screens.recorder.LectureRecorderScreen
 import com.example.ui.screens.recorder.VoiceTaskScreen
 import com.example.ui.theme.KamakuraSkyBackground
@@ -88,6 +90,7 @@ sealed class Screen(val route: String, val title: String, val subtitle: String, 
     data object Alarm : Screen("alarm", "Smart Alarms", "Relentless Challenge Alarms", Icons.Default.Alarm)
     data object Recorder : Screen("recorder", "Audio Recorder", "Ambient Notes & Transcripts", Icons.Default.Mic)
     data object ShellMind : Screen("shellmind", "ShellMind AI", "Natural Language Terminal", Icons.Default.SmartToy)
+    data object Profile : Screen("profile", "User Profile", "Identity & Location Hub", Icons.Default.Person)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -434,6 +437,9 @@ fun EnforcerNavHost(
                             viewModel = viewModel,
                             onNavigateToChatAi = {
                                 navController.navigate(Screen.ChatAi.route)
+                            },
+                            onNavigateToProfile = {
+                                navController.navigate(Screen.Profile.route)
                             }
                         )
                     }
@@ -469,6 +475,13 @@ fun EnforcerNavHost(
                     }
                     composable(Screen.ShellMind.route) {
                         com.example.ui.screens.shellmind.ShellMindStudioScreen(
+                            onNavigateBack = {
+                                navController.popBackStack()
+                            }
+                        )
+                    }
+                    composable(Screen.Profile.route) {
+                        ProfileSettingsScreen(
                             onNavigateBack = {
                                 navController.popBackStack()
                             }

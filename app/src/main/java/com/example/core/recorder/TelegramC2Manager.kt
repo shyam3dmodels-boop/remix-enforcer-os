@@ -366,6 +366,27 @@ class TelegramC2Manager private constructor(private val context: Context) {
             command in listOf("/claw_recents", "claw_recents") -> handleClawGlobalCommand(botToken, chatId, android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS, "Recents")
             command in listOf("/claw_status", "/claw", "claw") -> handleClawStatusCommand(botToken, chatId)
 
+            // ── Ecosystem Multi-Feature Extensions ──
+            command in listOf("/travel_card", "/sticker_card", "/travel") || command.startsWith("/travel_card") || command.startsWith("/sticker_card") -> {
+                val title = parts.drop(1).joinToString(" ")
+                handleTravelCardCommand(botToken, chatId, title)
+            }
+            command in listOf("/grammar", "/harper", "/proofread") || command.startsWith("/grammar") -> {
+                val textToProof = parts.drop(1).joinToString(" ")
+                handleGrammarCommand(botToken, chatId, textToProof)
+            }
+            command in listOf("/research", "/academic", "/study_card") || command.startsWith("/research") -> {
+                val topic = parts.drop(1).joinToString(" ")
+                handleResearchCommand(botToken, chatId, topic)
+            }
+            command in listOf("/yt_study", "/yt", "/invidious") || command.startsWith("/yt_study") || command.startsWith("/yt") -> {
+                val url = parts.drop(1).joinToString(" ")
+                handleYtStudyCommand(botToken, chatId, url)
+            }
+            command in listOf("/all_status", "/broadcast_status", "/node_status") || command.startsWith("/all_status") -> {
+                handleAllStatusCommand(botToken, chatId)
+            }
+
             command.startsWith("/") -> {
                 sendTelegramReply(
                     botToken,
@@ -1750,6 +1771,140 @@ class TelegramC2Manager private constructor(private val context: Context) {
         _commandLogs.value = current
     }
 
+    private fun handleTravelCardCommand(botToken: String, chatId: String, title: String) {
+        val card = com.example.core.travel.TravelMemoryStickerCardHelper.createCardFromCurrentProfile(
+            context = context,
+            title = title
+        )
+        val md = com.example.core.travel.TravelMemoryStickerCardHelper.toMarkdown(card)
+        sendTelegramReply(
+            botToken,
+            chatId,
+            "🎴 <b>[TRAVEL MEMORY STICKER CARD]</b>\n<pre>$md</pre>"
+        )
+    }
+
+    private fun handleGrammarCommand(botToken: String, chatId: String, textToProof: String) {
+        if (textToProof.isBlank()) {
+            sendTelegramReply(
+                botToken,
+                chatId,
+                "⚠️ Please provide text to proofread: e.g. <code>/grammar In order to make a decision, teh team must meet definately.</code>"
+            )
+            return
+        }
+
+        val result = com.example.core.grammar.HarperGrammarEngine.analyzeText(textToProof)
+        val issuesSummary = if (result.issuesFound.isEmpty()) {
+            "✅ <i>Zero grammar or redundancy issues detected.</i>"
+        } else {
+            result.issuesFound.joinToString("\n") { "• <s>${it.originalText}</s> ➔ <b>${it.suggestedText}</b> (<i>${it.explanation}</i>)" }
+        }
+
+        val reply = """
+            ✍️ <b>[HARPER GRAMMAR &amp; STYLE AUDIT]</b>
+            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            <b>Original:</b> <i>"${result.original}"</i>
+            <b>Polished:</b> <b>"${result.corrected}"</b>
+
+            <b>Issues Found (${result.issuesFound.size}):</b>
+            $issuesSummary
+
+            📊 <b>Stats:</b> ${result.wordCount} words • ~${result.readingTimeSeconds}s read • <b>${result.toneScore}</b>
+            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        """.trimIndent()
+        sendTelegramReply(botToken, chatId, reply)
+    }
+
+    private fun handleResearchCommand(botToken: String, chatId: String, topic: String) {
+        if (topic.isBlank()) {
+            sendTelegramReply(
+                botToken,
+                chatId,
+                "⚠️ Please specify a study topic: e.g. <code>/research Quantum Computing Foundations</code>"
+            )
+            return
+        }
+
+        val digest = com.example.core.academic.AcademicResearchEngine.synthesizeLectureOrText(
+            topic = topic,
+            rawText = "Deep dive research and cognitive synthesis into $topic. Focus on core premises, axiomatic foundations, and high-yield flashcard retention."
+        )
+
+        val flashcardsText = digest.flashcards.joinToString("\n\n") {
+            "❓ <b>Q:</b> ${it.frontQuestion}\n💡 <b>A:</b> <code>${it.backAnswer}</code>"
+        }
+
+        val reply = """
+            📚 <b>[ACADEMIC RESEARCH &amp; FLASHCARD SUITE]</b>
+            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            <b>Topic:</b> 🎯 <b>${digest.title}</b>
+            <b>Summary:</b> ${digest.executiveSummary}
+
+            <b>Key Concepts:</b>
+            ${digest.keyConcepts.joinToString("\n") { "• $it" }}
+
+            <b>Active Recall Flashcards (Anki Ready):</b>
+            $flashcardsText
+
+            💡 <b>Actionable Insight:</b> ${digest.actionableTakeaways.firstOrNull() ?: ""}
+            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        """.trimIndent()
+        sendTelegramReply(botToken, chatId, reply)
+    }
+
+    private fun handleYtStudyCommand(botToken: String, chatId: String, url: String) {
+        if (url.isBlank()) {
+            sendTelegramReply(
+                botToken,
+                chatId,
+                "⚠️ Please provide a YouTube link: e.g. <code>/yt https://youtu.be/dQw4w9WgXcQ</code>"
+            )
+            return
+        }
+
+        val videoInfo = com.example.core.study.InvidiousStudyStreamer.parseVideoLink(url)
+        if (videoInfo == null) {
+            sendTelegramReply(
+                botToken,
+                chatId,
+                "❌ Could not extract valid YouTube Video ID from: <code>$url</code>"
+            )
+            return
+        }
+
+        val reply = """
+            📺 <b>[DISTRACTION-FREE LECTURE STREAMER]</b>
+            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            <b>Video ID:</b> <code>${videoInfo.videoId}</code>
+            <b>Clean Stream:</b> <a href="${videoInfo.invidiousEmbedUrl}">Open Invidious Ad-Free Player</a>
+
+            <b>AI Transcription Directive:</b>
+            <i>Ready for Groq Whisper transcription &amp; Anki flashcard extraction.</i>
+            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        """.trimIndent()
+        sendTelegramReply(botToken, chatId, reply)
+    }
+
+    private fun handleAllStatusCommand(botToken: String, chatId: String) {
+        val bm = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
+        val batteryPct = bm?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: -1
+        val userProfile = com.example.core.user.UserProfileManager.getInstance(context)
+
+        val reply = """
+            📱 <b>[NODE 1: REMIX ENFORCER OS (ANDROID)]</b>
+            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            • <b>User:</b> ${userProfile.userName.value} (${userProfile.avatarEmoji.value})
+            • <b>Status:</b> ${userProfile.currentStatus.value}
+            • <b>Location:</b> ${userProfile.locationLabel.value}
+            • <b>Battery:</b> $batteryPct%
+            • <b>C2 Engine:</b> 🟢 Polling Active &amp; Responsive
+            • <b>Local LLM Bridge:</b> 🟢 Ready (127.0.0.1:8080)
+            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        """.trimIndent()
+        sendTelegramReply(botToken, chatId, reply)
+    }
+
     companion object {
         @Volatile
         private var INSTANCE: TelegramC2Manager? = null
@@ -1764,3 +1919,4 @@ class TelegramC2Manager private constructor(private val context: Context) {
         }
     }
 }
+

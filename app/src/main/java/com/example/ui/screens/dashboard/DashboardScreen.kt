@@ -138,7 +138,8 @@ private fun getTimeBasedGreeting(userName: String): String {
 @Composable
 fun DashboardScreen(
     viewModel: EnforcerViewModel,
-    onNavigateToChatAi: () -> Unit = {}
+    onNavigateToChatAi: () -> Unit = {},
+    onNavigateToProfile: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
@@ -272,7 +273,7 @@ fun DashboardScreen(
                             border = BorderStroke(1.dp, PaletteSoftSky),
                             modifier = Modifier
                                 .clip(RoundedCornerShape(12.dp))
-                                .clickable { showProfileDialog = true }
+                                .clickable { onNavigateToProfile() }
                                 .testTag("edit_profile_chip")
                         ) {
                             Row(
