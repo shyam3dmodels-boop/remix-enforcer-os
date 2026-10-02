@@ -4,9 +4,14 @@ import android.content.Context
 import android.content.Intent
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,14 +28,17 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.DirectionsWalk
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.NotificationsActive
@@ -38,23 +46,25 @@ import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.SignalCellularAlt
+import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -65,6 +75,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -97,9 +108,17 @@ import com.example.ui.theme.PaletteCornflower
 import com.example.ui.theme.PaletteIceCyan
 import com.example.ui.theme.PaletteMintFrost
 import com.example.ui.theme.PaletteSoftSky
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.util.Calendar
+
+private fun getTimeBasedGreeting(): String {
+    val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+    return when (hour) {
+        in 5..11 -> "Good Morning, Harsh ☀️"
+        in 12..16 -> "Good Afternoon, Harsh 🌤️"
+        in 17..21 -> "Good Evening, Harsh ✨"
+        else -> "Good Night, Harsh 🌙"
+    }
+}
 
 @Composable
 fun DashboardScreen(
@@ -129,6 +148,7 @@ fun DashboardScreen(
     val isC2Active by c2Manager.isPollingActive.collectAsStateWithLifecycle()
 
     var showActionToast by remember { mutableStateOf<String?>(null) }
+    var showHardwareGrid by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.refreshBattery()
@@ -143,550 +163,356 @@ fun DashboardScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = 14.dp)
                 .verticalScroll(scrollState)
                 .testTag("dashboard_screen"),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
-            // ─── 1. MISSION CONTROL HEADER CARD ──────────────────────────────
-            HarmonyGlassCard(
+            // ─── 1. HERO GREETING & FAST AI PROMPT CARD ────────────────────────
+            LiquidGlassCard(
                 modifier = Modifier.fillMaxWidth(),
                 cornerRadius = 24.dp,
                 elevation = 4.dp
             ) {
-                Column(modifier = Modifier.padding(18.dp)) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column {
+                            Text(
+                                text = getTimeBasedGreeting(),
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Black,
+                                color = KamakuraSignBlue,
+                                letterSpacing = (-0.3).sp
+                            )
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .size(10.dp)
+                                        .size(7.dp)
                                         .clip(CircleShape)
-                                        .background(KamakuraEmerald)
+                                        .background(Color(0xFF10B981))
                                 )
                                 Text(
-                                    text = "REMIX ENFORCER OS",
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.Black,
-                                    letterSpacing = 1.sp,
-                                    color = KamakuraSignBlue
+                                    text = "Autonomous Sentinel Active • Zero Latency",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = KamakuraTextSecondary
                                 )
                             }
-                            Text(
-                                text = "Secondary Brain 2.0 • Autonomous Mobile Sentinel HUD",
-                                fontSize = 11.sp,
-                                color = KamakuraTextSecondary
-                            )
                         }
 
-                        // Battery Indicator Pill
+                        // Cloud Host Status Pill
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = PaletteMintFrost.copy(alpha = 0.75f),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, PaletteSoftSky)
+                            color = PaletteMintFrost.copy(alpha = 0.85f),
+                            border = BorderStroke(1.dp, PaletteSoftSky)
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
-                                Icon(
-                                    imageVector = if (batteryStatus.isCharging) Icons.Default.BatteryChargingFull else Icons.Default.BatteryAlert,
-                                    contentDescription = "Battery",
-                                    tint = PaletteCornflower,
-                                    modifier = Modifier.size(14.dp)
-                                )
                                 Text(
-                                    text = "${batteryStatus.percent}% ${if (batteryStatus.isCharging) "⚡" else ""}",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
+                                    text = "🟢 LIVE",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.ExtraBold,
                                     color = PaletteCornflower
                                 )
                             }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Cloud Host Status & Device Anchor Row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Render Cloud Host Status Pill
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = PaletteIceCyan.copy(alpha = 0.65f),
-                            modifier = Modifier.padding(end = 4.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(5.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(7.dp)
-                                        .clip(CircleShape)
-                                        .background(KamakuraEmerald)
-                                )
-                                Text(
-                                    text = "Render Cloud: ONLINE (Keep-Alive)",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = KamakuraTextPrimary
-                                )
-                            }
-                        }
-
-                        // Device UUID Pill
-                        Text(
-                            text = "UUID: ${(deviceProfile?.deviceUuid ?: "ENF-001").take(10)}...",
-                            fontSize = 10.sp,
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold,
-                            color = KamakuraTextSecondary
-                        )
-                    }
-                }
-            }
-
-            // ─── 2. C2 HARDWARE ACTION LAUNCHER MATRIX ────────────────────────
-            Text(
-                text = "⚡ C2 HARDWARE ACTION MATRIX",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Black,
-                letterSpacing = 0.5.sp,
-                color = KamakuraDeepCobalt
-            )
-
-            // Grid of 8 Quick Action Tiles
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // Row 1: GPS Beacon & Camera Snapshot
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    C2ActionTile(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.LocationOn,
-                        title = "Pin GPS",
-                        subtitle = "Satellite Beacon",
-                        tintColor = PaletteCornflower,
-                        onClick = {
-                            viewModel.pinGps()
-                            c2Manager.executeCommand("/locate")
-                            showActionToast = "📍 GPS Beacon pinned & dispatched!"
-                        }
-                    )
-                    C2ActionTile(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.CameraAlt,
-                        title = "Remote Camera",
-                        subtitle = "Instant Snapshot",
-                        tintColor = PaletteSoftSky,
-                        onClick = {
-                            c2Manager.executeCommand("/photo")
-                            showActionToast = "📸 Snapshot triggered via sensor!"
-                        }
-                    )
-                }
-
-                // Row 2: Locator Siren & Stealth Mute
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    C2ActionTile(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.NotificationsActive,
-                        title = "Locator Siren",
-                        subtitle = "100% Alarm + Strobe",
-                        tintColor = KamakuraSunWarmth,
-                        onClick = {
-                            c2Manager.executeCommand("/siren 15")
-                            showActionToast = "🚨 100% Volume Siren & Torch active!"
-                        }
-                    )
-                    C2ActionTile(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.VolumeOff,
-                        title = "Stealth Mute",
-                        subtitle = "0% All Channels",
-                        tintColor = PaletteCornflower,
-                        onClick = {
-                            c2Manager.executeCommand("/mute")
-                            showActionToast = "🔇 All audio streams muted to 0%!"
-                        }
-                    )
-                }
-
-                // Row 3: ARP Sentinel & Subnet Scan
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    C2ActionTile(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.Security,
-                        title = "ARP Sentinel",
-                        subtitle = "Anti-Spoofing Audit",
-                        tintColor = KamakuraEmerald,
-                        onClick = {
-                            c2Manager.executeCommand("/arp")
-                            showActionToast = "🛡️ ARP table audit dispatched!"
-                        }
-                    )
-                    C2ActionTile(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.Sensors,
-                        title = "Subnet Sweep",
-                        subtitle = "Network Interface",
-                        tintColor = PaletteCornflower,
-                        onClick = {
-                            c2Manager.executeCommand("/netscan")
-                            showActionToast = "🌐 Subnet sweep triggered!"
-                        }
-                    )
-                }
-
-                // Row 4: Fast App Launcher & Media Play
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    C2ActionTile(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.Apps,
-                        title = "Quick App",
-                        subtitle = "Launch Spotify/YT",
-                        tintColor = PaletteCornflower,
-                        onClick = {
-                            c2Manager.executeCommand("/app spotify")
-                            showActionToast = "🚀 App launch triggered on screen!"
-                        }
-                    )
-                    C2ActionTile(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.PlayArrow,
-                        title = "Media Stream",
-                        subtitle = "Play Synthwave",
-                        tintColor = PaletteSoftSky,
-                        onClick = {
-                            c2Manager.executeCommand("/play synthwave")
-                            showActionToast = "🎵 Streaming audio started!"
-                        }
-                    )
-                }
-            }
-
-            // ─── 3. NETWORK & ARP SENTINEL HUD CARD ───────────────────────────
-            HarmonyGlassCard(
-                modifier = Modifier.fillMaxWidth(),
-                cornerRadius = 20.dp
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(CircleShape)
-                                    .background(KamakuraEmerald.copy(alpha = 0.15f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Security,
-                                    contentDescription = "Sentinel",
-                                    tint = KamakuraEmerald,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                            Column {
-                                Text(
-                                    text = "Wi-Fi ARP Sentinel",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp,
-                                    color = KamakuraSignBlue
-                                )
-                                Text(
-                                    text = "$networkType • $proximitySummary",
-                                    fontSize = 10.sp,
-                                    color = KamakuraTextSecondary
-                                )
-                            }
-                        }
-
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = KamakuraEmerald.copy(alpha = 0.15f),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, KamakuraEmerald.copy(alpha = 0.4f))
-                        ) {
-                            Text(
-                                text = "🟢 SECURE",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = KamakuraEmerald,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Text(
-                        text = "Real-time ARP packet inspection monitors hardware MAC bindings to prevent Man-in-the-Middle (MITM) and SSL strip attacks on public Wi-Fi.",
-                        fontSize = 11.sp,
-                        color = KamakuraTextSecondary,
-                        lineHeight = 15.sp
-                    )
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Button(
-                        onClick = {
-                            c2Manager.executeCommand("/arp")
-                            showActionToast = "🛡️ Inspecting ARP routing table..."
-                        },
+                    // Interactive Fast AI Search / Ask Pill
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = Color.White.copy(alpha = 0.95f),
+                        border = BorderStroke(1.2.dp, PaletteSoftSky),
+                        shadowElevation = 2.dp,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(40.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = KamakuraSignBlue)
-                    ) {
-                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Audit Network ARP Table", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-
-            // ─── 4. MEM0 BRAIN & INTELLIGENCE HUD ─────────────────────────────
-            HarmonyGlassCard(
-                modifier = Modifier.fillMaxWidth(),
-                cornerRadius = 20.dp
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable { onNavigateToChatAi() }
+                            .testTag("fast_ai_prompt_pill")
                     ) {
                         Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(CircleShape)
-                                    .background(PaletteIceCyan),
-                                contentAlignment = Alignment.Center
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Psychology,
-                                    contentDescription = "Mem0",
+                                    imageVector = Icons.Default.AutoAwesome,
+                                    contentDescription = "Ask AI",
                                     tint = PaletteCornflower,
-                                    modifier = Modifier.size(18.dp)
+                                    modifier = Modifier.size(20.dp)
                                 )
-                            }
-                            Column {
                                 Text(
-                                    text = "Mem0 Semantic Memory Graph",
-                                    fontWeight = FontWeight.Bold,
+                                    text = "Ask Second Brain anything...",
                                     fontSize = 13.sp,
-                                    color = KamakuraSignBlue
-                                )
-                                Text(
-                                    text = "User: Harsh • Firestore Real-Time Sync",
-                                    fontSize = 10.sp,
-                                    color = KamakuraTextSecondary
+                                    color = KamakuraTextSecondary,
+                                    fontWeight = FontWeight.Medium
                                 )
                             }
-                        }
 
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = PaletteMintFrost.copy(alpha = 0.7f)
-                        ) {
-                            Text(
-                                text = "ACTIVE",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = PaletteCornflower,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Text(
-                        text = "Autonomous memory reflection engine records user facts, hardware state transitions, and Telegram conversation turns into permanent vector memory.",
-                        fontSize = 11.sp,
-                        color = KamakuraTextSecondary,
-                        lineHeight = 15.sp
-                    )
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = {
-                                c2Manager.executeCommand("/memory")
-                                showActionToast = "🧠 Mem0 status queried!"
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(40.dp),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text("Query Mem0", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        }
-
-                        Button(
-                            onClick = onNavigateToChatAi,
-                            modifier = Modifier
-                                .weight(1.2f)
-                                .height(40.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = PaletteCornflower)
-                        ) {
-                            Text("Open JARVIS Chat", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = PaletteIceCyan.copy(alpha = 0.70f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Mic,
+                                        contentDescription = "Voice Prompt",
+                                        tint = PaletteCornflower,
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Text(
+                                        text = "PROMPT",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = PaletteCornflower
+                                    )
+                                }
+                            }
                         }
                     }
                 }
             }
 
-            // ─── 5. PHYSICAL TELEMETRY MATRIX ─────────────────────────────────
+            // ─── 2. 4-PILLAR FAST ACTION LAUNCHPAD (BENTO 2X2) ──────────────────
             Text(
-                text = "📊 PHYSICAL SENSOR TELEMETRY",
-                fontSize = 12.sp,
+                text = "⚡ MISSION CONTROL LAUNCHPAD",
+                fontSize = 11.sp,
                 fontWeight = FontWeight.Black,
-                letterSpacing = 0.5.sp,
-                color = KamakuraDeepCobalt
+                letterSpacing = 0.8.sp,
+                color = KamakuraDeepCobalt,
+                modifier = Modifier.padding(horizontal = 4.dp)
             )
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Steps Sensor
-                HarmonyGlassCard(
+                // Launchpad Tile 1: AI Chat Assistant
+                BentoLaunchpadTile(
+                    modifier = Modifier.weight(1f),
+                    title = "Second Brain AI",
+                    subtitle = "DeepSeek R1 & Groq",
+                    icon = Icons.Default.Psychology,
+                    accentColor = PaletteCornflower,
+                    badge = "GROUNDED",
+                    onClick = onNavigateToChatAi
+                )
+
+                // Launchpad Tile 2: Instant Audio Recorder
+                BentoLaunchpadTile(
+                    modifier = Modifier.weight(1f),
+                    title = "Ambient Audio",
+                    subtitle = "Groq Whisper STT",
+                    icon = Icons.Default.Mic,
+                    accentColor = PaletteCornflower,
+                    badge = "ACTIVE",
+                    onClick = {
+                        c2Manager.executeCommand("/record 15")
+                        showActionToast = "🎙️ Ambient 15s audio capture started!"
+                    }
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Launchpad Tile 3: Hardware GPS Pin
+                BentoLaunchpadTile(
+                    modifier = Modifier.weight(1f),
+                    title = "Pin GPS Location",
+                    subtitle = "${lastPinnedGps.ifEmpty { "High Precision" }}",
+                    icon = Icons.Default.LocationOn,
+                    accentColor = PaletteCornflower,
+                    badge = "SATELLITE",
+                    onClick = {
+                        viewModel.pinGps()
+                        c2Manager.executeCommand("/locate")
+                        showActionToast = "📍 GPS Beacon pinned & broadcasted!"
+                    }
+                )
+
+                // Launchpad Tile 4: Emergency Strobe & Siren
+                BentoLaunchpadTile(
+                    modifier = Modifier.weight(1f),
+                    title = "Locator Siren",
+                    subtitle = "100% Alarm + Torch",
+                    icon = Icons.Default.NotificationsActive,
+                    accentColor = PaletteCornflower,
+                    badge = "SAFETY",
+                    onClick = {
+                        c2Manager.executeCommand("/siren 15")
+                        showActionToast = "🚨 100% Volume Siren & Torch active!"
+                    }
+                )
+            }
+
+            // ─── 3. PHYSICAL TELEMETRY MATRIX (BENTO) ─────────────────────────
+            Text(
+                text = "📊 SENSOR & DIGITAL HABIT METRICS",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 0.8.sp,
+                color = KamakuraDeepCobalt,
+                modifier = Modifier.padding(horizontal = 4.dp)
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Steps Pedometer Card
+                LiquidGlassCard(
                     modifier = Modifier.weight(1f),
                     cornerRadius = 20.dp
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Icon(
-                                imageVector = Icons.Default.DirectionsWalk,
-                                contentDescription = "Pedometer",
-                                tint = KamakuraEmerald,
-                                modifier = Modifier.size(16.dp)
-                            )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.DirectionsWalk,
+                                    contentDescription = "Pedometer",
+                                    tint = PaletteCornflower,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = "STEPS",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = KamakuraTextSecondary
+                                )
+                            }
                             Text(
-                                text = "ACCELEROMETER",
+                                text = "$walkingState",
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = KamakuraTextSecondary
+                                color = PaletteCornflower
                             )
                         }
-                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
                         Text(
                             text = "$stepsToday",
-                            fontSize = 20.sp,
+                            fontSize = 22.sp,
                             fontWeight = FontWeight.Black,
                             color = KamakuraTextPrimary
                         )
+
                         Text(
-                            text = "State: $walkingState",
+                            text = "Goal: $stepGoal steps",
                             fontSize = 10.sp,
                             color = KamakuraTextSecondary
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
                         LinearProgressIndicator(
                             progress = { (stepsToday.toFloat() / stepGoal).coerceIn(0f, 1f) },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(5.dp)
+                                .height(6.dp)
                                 .clip(RoundedCornerShape(3.dp)),
-                            color = KamakuraEmerald,
-                            trackColor = KamakuraCloudShadow
+                            color = PaletteCornflower,
+                            trackColor = PaletteSoftSky.copy(alpha = 0.4f)
                         )
                     }
                 }
 
-                // Screen Usage & Unlocks
-                HarmonyGlassCard(
+                // Screen Usage & Focus Card
+                LiquidGlassCard(
                     modifier = Modifier.weight(1f),
                     cornerRadius = 20.dp
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Icon(
-                                imageVector = Icons.Default.Timer,
-                                contentDescription = "Screen Time",
-                                tint = PaletteCornflower,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Text(
-                                text = "SCREEN USAGE",
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = KamakuraTextSecondary
-                            )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Timer,
+                                    contentDescription = "Screen Usage",
+                                    tint = PaletteCornflower,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = "SCREEN FOCUS",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = KamakuraTextSecondary
+                                )
+                            }
                         }
-                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
                         Text(
                             text = "${screenTimeMinutes / 60}h ${screenTimeMinutes % 60}m",
-                            fontSize = 20.sp,
+                            fontSize = 22.sp,
                             fontWeight = FontWeight.Black,
                             color = KamakuraTextPrimary
                         )
+
                         Text(
                             text = "$unlockCount unlocks today",
                             fontSize = 10.sp,
                             color = KamakuraTextSecondary
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
                         LinearProgressIndicator(
                             progress = { (screenTimeMinutes.toFloat() / 360f).coerceIn(0f, 1f) },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(5.dp)
+                                .height(6.dp)
                                 .clip(RoundedCornerShape(3.dp)),
                             color = PaletteCornflower,
-                            trackColor = KamakuraCloudShadow
+                            trackColor = PaletteSoftSky.copy(alpha = 0.4f)
                         )
                     }
                 }
             }
 
-            // ─── 6. LIVE REMOTE COMMAND ACTIVITY FEED ─────────────────────────
-            HarmonyGlassCard(
+            // ─── 4. TELEGRAM C2 & AUTO-RESPONDER ACTIVITY FEED ────────────────
+            LiquidGlassCard(
                 modifier = Modifier.fillMaxWidth(),
                 cornerRadius = 20.dp
             ) {
@@ -696,81 +522,90 @@ fun DashboardScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
-                            Text(
-                                text = "⚡ Instant Auto-Responder Feed",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp,
-                                color = KamakuraSignBlue
-                            )
-                            Text(
-                                text = "Replies to commands from any sender immediately",
-                                fontSize = 10.sp,
-                                color = KamakuraTextSecondary
-                            )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(30.dp)
+                                    .clip(CircleShape)
+                                    .background(PaletteIceCyan),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Speed,
+                                    contentDescription = "C2 Feed",
+                                    tint = PaletteCornflower,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                            Column {
+                                Text(
+                                    text = "Telegram Auto-Responder Feed",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = KamakuraSignBlue
+                                )
+                                Text(
+                                    text = "Bi-directional Command & Control",
+                                    fontSize = 10.sp,
+                                    color = KamakuraTextSecondary
+                                )
+                            }
                         }
 
                         Surface(
                             shape = RoundedCornerShape(10.dp),
-                            color = if (isC2Active) KamakuraEmerald.copy(alpha = 0.15f) else KamakuraCoralWarning.copy(alpha = 0.15f)
+                            color = if (isC2Active) PaletteMintFrost.copy(alpha = 0.85f) else Color(0xFFFFECEC)
                         ) {
                             Text(
                                 text = if (isC2Active) "LISTENING" else "STANDBY",
                                 fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isC2Active) KamakuraEmerald else KamakuraCoralWarning,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                fontWeight = FontWeight.ExtraBold,
+                                color = if (isC2Active) PaletteCornflower else Color(0xFFE11D48),
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
-                    // Last executed command banner
+                    // Last executed command pill
                     Surface(
                         shape = RoundedCornerShape(12.dp),
-                        color = Color.White.copy(alpha = 0.9f),
-                        modifier = Modifier.fillMaxWidth(),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, PaletteSoftSky)
+                        color = Color.White.copy(alpha = 0.92f),
+                        border = BorderStroke(1.dp, PaletteSoftSky),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
                             modifier = Modifier.padding(10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Speed,
-                                contentDescription = null,
-                                tint = PaletteCornflower,
-                                modifier = Modifier.size(16.dp)
+                            Text(
+                                text = "LATEST C2:",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = KamakuraTextSecondary
                             )
-                            Column {
-                                Text(
-                                    text = "LAST EXECUTED COMMAND",
-                                    fontSize = 8.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = KamakuraTextSecondary
-                                )
-                                Text(
-                                    text = lastC2Command,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = FontFamily.Monospace,
-                                    color = KamakuraTextPrimary
-                                )
-                            }
+                            Text(
+                                text = lastC2Command,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace,
+                                color = PaletteCornflower
+                            )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // Recent command logs (up to 4 entries)
                     if (c2Logs.isNotEmpty()) {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            c2Logs.take(4).forEach { logLine ->
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            c2Logs.take(3).forEach { logLine ->
                                 Surface(
                                     shape = RoundedCornerShape(8.dp),
-                                    color = KamakuraCloudShadow.copy(alpha = 0.2f),
+                                    color = PaletteSoftSky.copy(alpha = 0.20f),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Text(
@@ -778,78 +613,205 @@ fun DashboardScreen(
                                         fontSize = 10.sp,
                                         fontFamily = FontFamily.Monospace,
                                         color = KamakuraTextPrimary,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                                         maxLines = 1
                                     )
                                 }
                             }
                         }
-                    } else {
-                        Text(
-                            text = "No remote commands received yet. Send /list to the bot in Telegram.",
-                            fontSize = 10.sp,
-                            color = KamakuraTextSecondary
-                        )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            // ─── 5. EXPANDABLE HARDWARE COMMANDS DRAWER ───────────────────────
+            LiquidGlassCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .animateContentSize(spring(stiffness = Spring.StiffnessMediumLow)),
+                cornerRadius = 20.dp
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showHardwareGrid = !showHardwareGrid },
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Sensors,
+                                contentDescription = "Hardware",
+                                tint = PaletteCornflower,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = "Extended Hardware Diagnostic Tools",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = KamakuraSignBlue
+                            )
+                        }
+
+                        Icon(
+                            imageVector = if (showHardwareGrid) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = "Toggle",
+                            tint = PaletteCornflower
+                        )
+                    }
+
+                    if (showHardwareGrid) {
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        c2Manager.executeCommand("/arp")
+                                        showActionToast = "🛡️ ARP table audit dispatched!"
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("ARP Sentinel", fontSize = 11.sp)
+                                }
+
+                                OutlinedButton(
+                                    onClick = {
+                                        c2Manager.executeCommand("/netscan")
+                                        showActionToast = "🌐 Subnet sweep triggered!"
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Subnet Sweep", fontSize = 11.sp)
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        c2Manager.executeCommand("/mute")
+                                        showActionToast = "🔇 Mute triggered!"
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Stealth Mute", fontSize = 11.sp)
+                                }
+
+                                OutlinedButton(
+                                    onClick = {
+                                        c2Manager.executeCommand("/photo")
+                                        showActionToast = "📸 Snapshot triggered!"
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Snapshot", fontSize = 11.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(28.dp))
         }
     }
 }
 
 @Composable
-private fun C2ActionTile(
+private fun BentoLaunchpadTile(
     modifier: Modifier = Modifier,
-    icon: ImageVector,
     title: String,
     subtitle: String,
-    tintColor: Color,
+    icon: ImageVector,
+    accentColor: Color,
+    badge: String,
     onClick: () -> Unit
 ) {
     Surface(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(20.dp),
         color = LiquidGlassFill,
+        shadowElevation = 2.dp,
         modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
-            .clickable { onClick() }
+            .clip(RoundedCornerShape(20.dp))
+            .clickable(onClick = onClick)
             .border(
-                1.dp,
-                Brush.horizontalGradient(listOf(PaletteCornflower.copy(alpha = 0.4f), PaletteIceCyan.copy(alpha = 0.6f))),
-                RoundedCornerShape(16.dp)
+                BorderStroke(
+                    1.2.dp,
+                    Brush.verticalGradient(
+                        listOf(
+                            PaletteCornflower.copy(alpha = 0.50f),
+                            PaletteIceCyan.copy(alpha = 0.60f)
+                        )
+                    )
+                ),
+                RoundedCornerShape(20.dp)
             )
+            .testTag("launchpad_tile_${title.lowercase().replace(" ", "_")}")
     ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(34.dp)
-                    .clip(CircleShape)
-                    .background(tintColor.copy(alpha = 0.18f)),
-                contentAlignment = Alignment.Center
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = title,
-                    tint = tintColor,
-                    modifier = Modifier.size(18.dp)
-                )
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(accentColor.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = title,
+                        tint = accentColor,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = PaletteMintFrost.copy(alpha = 0.65f)
+                ) {
+                    Text(
+                        text = badge,
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = PaletteCornflower,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
             }
+
             Column {
                 Text(
                     text = title,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = KamakuraTextPrimary
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = KamakuraTextPrimary,
+                    letterSpacing = (-0.2).sp
                 )
                 Text(
                     text = subtitle,
-                    fontSize = 9.sp,
-                    color = KamakuraTextSecondary
+                    fontSize = 10.sp,
+                    color = KamakuraTextSecondary,
+                    maxLines = 1
                 )
             }
         }

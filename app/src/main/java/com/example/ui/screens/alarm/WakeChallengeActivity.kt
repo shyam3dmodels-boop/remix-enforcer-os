@@ -141,12 +141,19 @@ class WakeChallengeActivity : ComponentActivity() {
 fun WakeChallengeContent(
     onDismissSuccess: () -> Unit
 ) {
-    var targetsTapped by remember { mutableIntStateOf(0) }
-    val totalRequired = 5
+    val context = androidx.compose.ui.platform.LocalContext.current
     var isCompleted by remember { mutableStateOf(false) }
 
-    // Mode: 0 = Moving Target, 1 = Physics/Math Numericals
-    var challengeMode by remember { mutableIntStateOf(0) }
+    // Mode: 0 = Moving Target, 1 = Math Numericals, 2 = Shake Device, 3 = Memory Matrix, 4 = Typing Mantra
+    var challengeMode by remember { mutableIntStateOf(2) } // default to Shake for immediate arousal
+
+    // Diminishing Snooze Manager
+    val snoozeManager = remember { com.example.core.alarm.crescendo.DiminishingSnoozeManager(context) }
+    var currentSnoozeCount by remember { mutableIntStateOf(snoozeManager.currentSnoozeCount) }
+
+    // Moving Target State
+    var targetsTapped by remember { mutableIntStateOf(0) }
+    val totalRequired = 5
 
     // Math numerical state
     var num1 by remember { mutableIntStateOf(17) }
@@ -162,6 +169,59 @@ fun WakeChallengeContent(
         mathInput = ""
         mathError = false
     }
+
+    // Shake Challenge State
+    var currentShakes by remember { mutableIntStateOf(0) }
+    val targetShakes = 30
+    val shakeDetector = remember {
+        com.example.core.alarm.captcha.ShakeDetectorCaptcha(
+            context = context,
+            requiredShakes = targetShakes,
+            onProgress = { cur, _ -> currentShakes = cur },
+            onComplete = {
+                isCompleted = true
+                onDismissSuccess()
+            }
+        )
+    }
+
+    LaunchedEffect(challengeMode) {
+        if (challengeMode == 2) {
+            shakeDetector.start()
+        } else {
+            shakeDetector.stop()
+        }
+    }
+
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose {
+            shakeDetector.stop()
+        }
+    }
+
+    // Memory Matrix State
+    val matrixCaptcha = remember { com.example.core.alarm.captcha.MemoryMatrixCaptcha(gridSize = 9, sequenceLength = 4) }
+    var highlightedTile by remember { mutableStateOf<Int?>(null) }
+    var matrixStep by remember { mutableIntStateOf(0) }
+    var matrixError by remember { mutableStateOf(false) }
+
+    LaunchedEffect(challengeMode) {
+        if (challengeMode == 3) {
+            // Flash sequence
+            matrixCaptcha.generateNewSequence()
+            for (tile in matrixCaptcha.sequence) {
+                highlightedTile = tile
+                delay(600L)
+                highlightedTile = null
+                delay(200L)
+            }
+        }
+    }
+
+    // Typing Mantra State
+    val typingCaptcha = remember { com.example.core.alarm.captcha.TypingMantraCaptcha() }
+    var typedText by remember { mutableStateOf("") }
+    var typingProgress by remember { mutableFloatStateOf(0f) }
 
     // Flash background warning state
     var flashAlert by remember { mutableStateOf(false) }
@@ -181,10 +241,10 @@ fun WakeChallengeContent(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp),
+                .padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
             // Alarm Header
             Row(
@@ -203,140 +263,385 @@ fun WakeChallengeContent(
                     modifier = Modifier.size(18.dp)
                 )
                 Text(
-                    text = "ENFORCER OS // WAKEFULNESS PROTOCOL",
+                    text = "ENFORCER OS // WAKE PROTOCOL",
                     color = CyberRed,
                     style = MaterialTheme.typography.labelLarge
                 )
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             Text(
                 text = "RELENTLESS ALARM ACTIVE",
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.headlineSmall,
                 color = Color.White,
+                fontWeight = FontWeight.Black,
                 textAlign = TextAlign.Center
             )
 
-            // 1-Tap In-Class Silence Button (Emergency bypass)
-            Button(
-                onClick = onDismissSuccess,
-                colors = ButtonDefaults.buttonColors(containerColor = CyberRed),
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 10.dp, bottom = 6.dp)
-                    .testTag("in_class_instant_silence_button")
-            ) {
-                Icon(
-                    imageVector = Icons.Default.VolumeOff,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "🚨 IN CLASS? SILENCE IMMEDIATELY (1-TAP)",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.labelLarge
-                )
-            }
-
-            // Mode Selector Pill
+            // Diminishing Snooze & In-Class Silence Bar
             Row(
                 modifier = Modifier
-                    .padding(vertical = 8.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(CyberSurface)
-                    .border(1.dp, Color(0xFF223252), RoundedCornerShape(20.dp))
-                    .padding(4.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // Diminishing Snooze Button
                 Button(
-                    onClick = { challengeMode = 0 },
+                    onClick = {
+                        val snoozeMins = snoozeManager.consumeSnooze()
+                        if (snoozeMins > 0) {
+                            currentSnoozeCount = snoozeManager.currentSnoozeCount
+                            val scheduler = com.example.core.alarm.SmartAlarmScheduler(context)
+                            scheduler.schedulePresetAlarm(snoozeMins, "Snoozed Wakeup ($snoozeMins min)")
+                            onDismissSuccess()
+                        }
+                    },
+                    enabled = snoozeManager.canSnooze(),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (challengeMode == 0) CyberCyan else Color.Transparent
+                        containerColor = CyberAmber,
+                        disabledContainerColor = Color(0xFF334155)
                     ),
-                    shape = RoundedCornerShape(16.dp),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.weight(1f)
                 ) {
                     Text(
-                        text = "MOVING TARGET",
-                        color = if (challengeMode == 0) CyberBg else Color.White,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold
+                        text = if (snoozeManager.canSnooze()) "SNOOZE (+${snoozeManager.getNextSnoozeMinutes()}m)" else "SNOOZE LOCKED 🛑",
+                        color = if (snoozeManager.canSnooze()) CyberBg else Color(0xFF94A3B8),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp
                     )
                 }
 
+                // 1-Tap In-Class Silence Button
                 Button(
-                    onClick = { challengeMode = 1 },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (challengeMode == 1) CyberGreen else Color.Transparent
-                    ),
-                    shape = RoundedCornerShape(16.dp),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                    onClick = onDismissSuccess,
+                    colors = ButtonDefaults.buttonColors(containerColor = CyberRed),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.weight(1f)
                 ) {
+                    Icon(
+                        imageVector = Icons.Default.VolumeOff,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "SOLVE 3 NUMERICALS",
-                        color = if (challengeMode == 1) CyberBg else Color.White,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold
+                        text = "IN-CLASS MUTE",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp
                     )
                 }
             }
 
-            if (challengeMode == 0) {
-                // Moving Target Mode
-                Text(
-                    text = "Tap the moving target $totalRequired times to prove consciousness.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF94A3B8),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(bottom = 10.dp)
+            // Challenge Mode Horizontal Tabs
+            androidx.compose.foundation.lazy.LazyRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                val modes = listOf(
+                    Triple(2, "📱 SHAKE", CyberCyan),
+                    Triple(1, "🧮 MATH", CyberGreen),
+                    Triple(3, "🧠 MEMORY", CyberAmber),
+                    Triple(4, "✍️ TYPING", Color(0xFFE879F9)),
+                    Triple(0, "🎯 TARGET", Color(0xFF60A5FA))
                 )
+                items(modes.size) { idx ->
+                    val (modeId, title, accent) = modes[idx]
+                    val isSelected = challengeMode == modeId
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(if (isSelected) accent.copy(alpha = 0.25f) else CyberSurface)
+                            .border(1.dp, if (isSelected) accent else Color(0xFF223252), RoundedCornerShape(14.dp))
+                            .clickable { challengeMode = modeId }
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = title,
+                            color = if (isSelected) accent else Color(0xFF94A3B8),
+                            fontWeight = if (isSelected) FontWeight.Black else FontWeight.Medium,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
 
-                // Progress Indicators
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Mode 2: SHAKE SENSOR CHALLENGE
+            if (challengeMode == 2) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = CyberSurface),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF223252)),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.weight(1f).fillMaxWidth()
                 ) {
-                    for (i in 1..totalRequired) {
-                        val achieved = i <= targetsTapped
-                        Box(
-                            modifier = Modifier
-                                .size(22.dp)
-                                .clip(CircleShape)
-                                .background(if (achieved) CyberGreen else Color(0xFF1E293B))
-                                .border(
-                                    1.5.dp,
-                                    if (achieved) CyberGreen else Color(0xFF475569),
-                                    CircleShape
-                                ),
-                            contentAlignment = Alignment.Center
+                    Column(
+                        modifier = Modifier.fillMaxSize().padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FlashOn,
+                            contentDescription = "Shake",
+                            tint = CyberCyan,
+                            modifier = Modifier.size(56.dp)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "SHAKE PHONE TO WAKE",
+                            color = Color.White,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Shake vigorously $targetShakes times to prove consciousness.",
+                            color = Color(0xFF94A3B8),
+                            style = MaterialTheme.typography.bodySmall,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(top = 4.dp, bottom = 20.dp)
+                        )
+
+                        // Progress Bar
+                        val progress = (currentShakes.toFloat() / targetShakes.toFloat()).coerceIn(0f, 1f)
+                        androidx.compose.material3.LinearProgressIndicator(
+                            progress = { progress },
+                            modifier = Modifier.fillMaxWidth(0.85f).height(14.dp).clip(RoundedCornerShape(7.dp)),
+                            color = CyberCyan,
+                            trackColor = Color(0xFF1E293B)
+                        )
+
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Text(
+                            text = "$currentShakes / $targetShakes Shakes",
+                            color = CyberCyan,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Black,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+            }
+
+            // Mode 1: MATH NUMERICALS
+            else if (challengeMode == 1) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = CyberSurface),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF223252)),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.weight(1f).fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxSize().padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = "PROBLEM ${mathSolvedCount + 1} OF $mathRequired",
+                            color = CyberGreen,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "$num1 × $num2 = ?",
+                            color = Color.White,
+                            fontSize = 32.sp,
+                            fontWeight = FontWeight.Black,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
+                        OutlinedTextField(
+                            value = mathInput,
+                            onValueChange = { mathInput = it },
+                            label = { Text("Your Answer") },
+                            isError = mathError,
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = CyberGreen,
+                                unfocusedBorderColor = Color(0xFF334155),
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White
+                            ),
+                            modifier = Modifier.fillMaxWidth(0.8f)
+                        )
+                        if (mathError) {
+                            Text(
+                                text = "❌ Incorrect! Try again.",
+                                color = CyberRed,
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Button(
+                            onClick = {
+                                val expected = num1 * num2
+                                if (mathInput.trim().toIntOrNull() == expected) {
+                                    mathSolvedCount++
+                                    if (mathSolvedCount >= mathRequired) {
+                                        isCompleted = true
+                                        onDismissSuccess()
+                                    } else {
+                                        nextMathProblem()
+                                    }
+                                } else {
+                                    mathError = true
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = CyberGreen),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth(0.8f)
                         ) {
-                            if (achieved) {
-                                Icon(
-                                    imageVector = Icons.Default.CheckCircle,
-                                    contentDescription = "Done",
-                                    tint = CyberBg,
-                                    modifier = Modifier.size(16.dp)
-                                )
+                            Text(
+                                text = if (mathSolvedCount + 1 >= mathRequired) "SUBMIT & DISMISS" else "CHECK & NEXT",
+                                color = CyberBg,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Mode 3: MEMORY MATRIX
+            else if (challengeMode == 3) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = CyberSurface),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF223252)),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.weight(1f).fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxSize().padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = "REPEAT THE SEQUENCE",
+                            color = CyberAmber,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                        Text(
+                            text = if (matrixError) "❌ Sequence failed! Resetting..." else "Tap the highlighted tiles in order",
+                            color = if (matrixError) CyberRed else Color(0xFF94A3B8),
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(bottom = 14.dp)
+                        )
+
+                        // 3x3 Grid
+                        for (row in 0 until 3) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                modifier = Modifier.padding(vertical = 5.dp)
+                            ) {
+                                for (col in 0 until 3) {
+                                    val index = row * 3 + col
+                                    val isLit = highlightedTile == index
+                                    val isSelected = matrixCaptcha.userPicks.contains(index)
+                                    Box(
+                                        modifier = Modifier
+                                            .size(72.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(
+                                                when {
+                                                    isLit -> CyberAmber
+                                                    isSelected -> CyberGreen
+                                                    else -> Color(0xFF1E293B)
+                                                }
+                                            )
+                                            .border(
+                                                2.dp,
+                                                if (isLit) Color.White else Color(0xFF334155),
+                                                RoundedCornerShape(12.dp)
+                                            )
+                                            .clickable {
+                                                val (correct, complete) = matrixCaptcha.onTileClicked(index)
+                                                if (!correct) {
+                                                    matrixError = true
+                                                    matrixCaptcha.resetUserPicks()
+                                                } else if (complete) {
+                                                    isCompleted = true
+                                                    onDismissSuccess()
+                                                }
+                                            }
+                                    )
+                                }
                             }
                         }
                     }
                 }
+            }
 
-                Text(
-                    text = "$targetsTapped / $totalRequired Taps Completed",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = if (targetsTapped == totalRequired) CyberGreen else CyberCyan,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
+            // Mode 4: TYPING MANTRA
+            else if (challengeMode == 4) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = CyberSurface),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF223252)),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.weight(1f).fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxSize().padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = "TYPE THE MANTRA EXACTLY",
+                            color = Color(0xFFE879F9),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = "\"${typingCaptcha.currentMantra}\"",
+                            color = Color.White,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF1E293B))
+                                .padding(12.dp)
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
+                        OutlinedTextField(
+                            value = typedText,
+                            onValueChange = {
+                                typedText = it
+                                typingProgress = typingCaptcha.calculateMatchProgress(it)
+                                if (typingCaptcha.validate(it)) {
+                                    isCompleted = true
+                                    onDismissSuccess()
+                                }
+                            },
+                            label = { Text("Type here...") },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color(0xFFE879F9),
+                                unfocusedBorderColor = Color(0xFF334155),
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White
+                            ),
+                            modifier = Modifier.fillMaxWidth(0.95f)
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        androidx.compose.material3.LinearProgressIndicator(
+                            progress = { typingProgress },
+                            modifier = Modifier.fillMaxWidth(0.95f).height(8.dp).clip(RoundedCornerShape(4.dp)),
+                            color = Color(0xFFE879F9),
+                            trackColor = Color(0xFF1E293B)
+                        )
+                    }
+                }
+            }
 
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Interactive Bouncing Target Area
+            // Mode 0: MOVING TARGET
+            else {
                 BoxWithConstraints(
                     modifier = Modifier
                         .weight(1f)
@@ -415,138 +720,11 @@ fun WakeChallengeContent(
                                 )
                             }
                         }
-                    } else {
-                        Column(
-                            modifier = Modifier.fillMaxSize(),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CheckCircle,
-                                contentDescription = "Success",
-                                tint = CyberGreen,
-                                modifier = Modifier.size(64.dp)
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                text = "CONSCIOUSNESS VERIFIED",
-                                style = MaterialTheme.typography.titleLarge,
-                                color = CyberGreen
-                            )
-                            Text(
-                                text = "Alarm dismissed. Rise and conquer the day.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color(0xFF94A3B8),
-                                modifier = Modifier.padding(top = 4.dp)
-                            )
-                        }
-                    }
-                }
-            } else {
-                // Physics & Math Numerical Mode
-                Text(
-                    text = "Solve $mathRequired arithmetic numericals to force cognitive arousal and stop the alarm.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF94A3B8),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(bottom = 10.dp)
-                )
-
-                // Math Card
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = CyberSurface),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF223252)),
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = "PROBLEM ${mathSolvedCount + 1} OF $mathRequired",
-                            color = CyberCyan,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Text(
-                            text = "$num1 × $num2 = ?",
-                            color = Color.White,
-                            fontSize = 32.sp,
-                            fontWeight = FontWeight.Black,
-                            fontFamily = FontFamily.Monospace
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        OutlinedTextField(
-                            value = mathInput,
-                            onValueChange = { mathInput = it },
-                            label = { Text("Your Answer") },
-                            isError = mathError,
-                            singleLine = true,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = CyberGreen,
-                                unfocusedBorderColor = Color(0xFF334155),
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth(0.8f)
-                                .testTag("math_challenge_input")
-                        )
-
-                        if (mathError) {
-                            Text(
-                                text = "❌ Incorrect! Try again to stop the alarm.",
-                                color = CyberRed,
-                                style = MaterialTheme.typography.labelSmall,
-                                modifier = Modifier.padding(top = 6.dp)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Button(
-                            onClick = {
-                                val expected = num1 * num2
-                                if (mathInput.trim().toIntOrNull() == expected) {
-                                    mathSolvedCount++
-                                    if (mathSolvedCount >= mathRequired) {
-                                        isCompleted = true
-                                        onDismissSuccess()
-                                    } else {
-                                        nextMathProblem()
-                                    }
-                                } else {
-                                    mathError = true
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = CyberGreen),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier
-                                .fillMaxWidth(0.8f)
-                                .testTag("submit_math_answer_button")
-                        ) {
-                            Text(
-                                text = if (mathSolvedCount + 1 >= mathRequired) "SUBMIT & DISMISS ALARM" else "CHECK & NEXT (1/3)",
-                                color = CyberBg,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             // Emergency manual dismiss fallback
             Button(
@@ -564,17 +742,16 @@ fun WakeChallengeContent(
                     imageVector = Icons.Default.Alarm,
                     contentDescription = null,
                     tint = CyberCyan,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(16.dp)
                 )
                 Spacer(modifier = Modifier.size(8.dp))
                 Text(
                     text = "EMERGENCY DISMISS ALARM",
                     color = CyberCyan,
-                    style = MaterialTheme.typography.labelLarge
+                    style = MaterialTheme.typography.labelMedium
                 )
             }
-
-            Spacer(modifier = Modifier.height(12.dp))
         }
     }
 }
+

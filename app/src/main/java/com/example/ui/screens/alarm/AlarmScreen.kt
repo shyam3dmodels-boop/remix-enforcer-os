@@ -172,7 +172,146 @@ fun AlarmScreen(
             onSchedulePreset = { mins, label -> viewModel.schedulePresetAlarm(mins, label) }
         )
 
+        // --- 6. SMART ALARM PROTOCOL (Sleep-Captcha + WakeIQ + AlarmClockXtreme) ---
+        SmartAlarmProtocolSection()
+
         Spacer(modifier = Modifier.height(24.dp))
+    }
+}
+
+// ==========================================
+// 6. SMART ALARM PROTOCOL (WakeIQ / Captcha / Crescendo)
+// ==========================================
+
+@Composable
+private fun SmartAlarmProtocolSection() {
+    var smartPeriodEnabled by remember { mutableStateOf(true) }
+    var smartWindowMins by remember { mutableIntStateOf(20) }
+    var crescendoDurationSec by remember { mutableIntStateOf(30) }
+    var selectedDefaultCaptcha by remember { mutableStateOf("Shake Phone") }
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = CyberSurface),
+        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, CyberBorder, RoundedCornerShape(14.dp))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Bedtime,
+                    contentDescription = null,
+                    tint = CyberCyan,
+                    modifier = Modifier.size(20.dp)
+                )
+                Text(
+                    text = "ADVANCED PROTOCOLS (WakeIQ & Captcha)",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = CyberCyan,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            // 1. WakeIQ Smart Period
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "WakeIQ Circadian Smart Window",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = if (smartPeriodEnabled) "Wakes in light sleep (${smartWindowMins}m window) to avoid grogginess" else "Disabled • Exact time trigger only",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF94A3B8)
+                    )
+                }
+                Switch(
+                    checked = smartPeriodEnabled,
+                    onCheckedChange = { smartPeriodEnabled = it },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = CyberCyan,
+                        checkedTrackColor = CyberCyan.copy(alpha = 0.3f)
+                    )
+                )
+            }
+
+            // 2. AlarmClockXtreme Volume Crescendo
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Gradual Volume Crescendo",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "Starts at 15% and ramps up smoothly over ${crescendoDurationSec}s",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF94A3B8)
+                    )
+                }
+                Text(
+                    text = "${crescendoDurationSec}s Ramp",
+                    color = CyberGreen,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp
+                )
+            }
+
+            // 3. Sleep as Android CAPTCHA Mode
+            Column {
+                Text(
+                    text = "Default Wake Challenge Mode",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    val captchas = listOf("Shake Phone", "Math Quiz", "Memory", "Mantra")
+                    captchas.forEach { captcha ->
+                        val isSelected = selectedDefaultCaptcha == captcha
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (isSelected) CyberCyan.copy(alpha = 0.2f) else Color(0xFF1E293B))
+                                .border(1.dp, if (isSelected) CyberCyan else Color(0xFF334155), RoundedCornerShape(10.dp))
+                                .clickable { selectedDefaultCaptcha = captcha }
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = captcha,
+                                color = if (isSelected) CyberCyan else Color(0xFF94A3B8),
+                                fontSize = 11.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

@@ -18,6 +18,11 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
+import com.example.core.alarm.SmartAlarmScheduler
+import com.example.core.recorder.GpsLocationHelper
+import com.example.data.local.entity.VoiceTaskEntity
+import java.util.regex.Pattern
+
 /**
  * Universal Multi-Provider AI Intelligence Engine for Secondary Brain 2.0.
  *
@@ -42,6 +47,7 @@ class SecondBrainChatEngine private constructor(private val context: Context) {
     private val groqManager = GroqAiManager.getInstance(context)
     private val keySyncManager = AiKeySyncManager.getInstance(context)
     private val telegramConfig = TelegramConfigManager.getInstance(context)
+    private val alarmScheduler = SmartAlarmScheduler(context)
 
     private val okHttpClient = OkHttpClient.Builder()
         .connectTimeout(25, TimeUnit.SECONDS)
@@ -106,7 +112,7 @@ class SecondBrainChatEngine private constructor(private val context: Context) {
             activeLocation = locationLabel
         )
 
-        // 4. Build Grounded Context for Selected AI Provider
+        // 4. Build Grounded Context for Selected AI Provider with Tool Capabilities
         val systemContext = """
             You are Secondary Brain 2.0, a high-performance personal AI companion.
             Current Real-Time Grounding Context:
@@ -117,11 +123,18 @@ class SecondBrainChatEngine private constructor(private val context: Context) {
             - Recent Voice Notes & Tasks:
             ${recentNotes.take(5).joinToString("\n") { "  * $it" }}
 
+            Autonomous Agent Capabilities:
+            You can manage the user's alarms, to-dos, and pinned locations on-device.
+            When the user requests an action, execute it clearly and inform them:
+            - To set an alarm: Use format TOOL:SET_ALARM(HH:MM, "Label")
+            - To add a to-do task: Use format TOOL:ADD_TODO("Task Title")
+            - To pin GPS location: Use format TOOL:PIN_LOCATION("Location Label")
+
             Answer concisely, friendly, and smartly in 2-4 sentences. Leverage the real-time context when relevant.
         """.trimIndent()
 
         // 5. Generate AI Response via Multi-Provider Dispatcher
-        val aiResponse = generateMultiProviderResponse(
+        var aiResponse = generateMultiProviderResponse(
             provider = provider,
             model = model,
             userPrompt = userText,
@@ -129,7 +142,13 @@ class SecondBrainChatEngine private constructor(private val context: Context) {
             sessionId = sessionId
         )
 
-        // 6. Record AI message to Room Local SQLite
+        // 6. Execute Autonomous Device Agent Actions (Alarms, To-Dos, Location Fixes)
+        val actionResult = executeAutonomousAgentActions(userText, aiResponse)
+        if (actionResult.isNotBlank()) {
+            aiResponse = "$aiResponse\n\n$actionResult"
+        }
+
+        // 7. Record AI message to Room Local SQLite
         repository.saveChatMessage(
             AiChatMessageEntity(
                 sessionId = sessionId,
@@ -141,7 +160,7 @@ class SecondBrainChatEngine private constructor(private val context: Context) {
             )
         )
 
-        // 7. Record AI message to Firebase Firestore
+        // 8. Record AI message to Firebase Firestore
         firestoreSync.sendChatMessage(
             chatId = sessionId,
             sender = "AI",
@@ -150,10 +169,95 @@ class SecondBrainChatEngine private constructor(private val context: Context) {
             activeLocation = locationLabel
         )
 
-        // 8. Sync message to Server Backend SQLite in background
+        // 9. Sync message to Server Backend SQLite in background
         syncMessageToServer(sessionId, userText, aiResponse, provider, model, groundingMeta)
 
         aiResponse
+    }
+
+    /**
+     * Executes native on-device actions requested by the user or triggered by AI tool directives.
+     */
+    private suspend fun executeAutonomousAgentActions(userText: String, aiResponse: String): String {
+        val feedback = mutableListOf<String>()
+        val combinedText = "$userText\n$aiResponse".lowercase()
+
+        // 1. Alarm Scheduling Action
+        // e.g. "TOOL:SET_ALARM(06:30, "Gym")" or user says "set alarm for 7:00 AM" or "6 baje alarm"
+        val alarmPattern = Pattern.compile("(?i)(?:tool:set_alarm\\((\\d{1,2}):(\\d{2})|alarm(?:\\s+for|\\s+at)?\\s*(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)?)")
+        val alarmMatcher = alarmPattern.matcher(combinedText)
+        if (alarmMatcher.find()) {
+            try {
+                var hour = alarmMatcher.group(1)?.toIntOrNull() ?: alarmMatcher.group(3)?.toIntOrNull() ?: 6
+                val minute = alarmMatcher.group(2)?.toIntOrNull() ?: alarmMatcher.group(4)?.toIntOrNull() ?: 0
+                val amPm = alarmMatcher.group(5)?.lowercase()
+
+                if (amPm == "pm" && hour < 12) hour += 12
+                if (amPm == "am" && hour == 12) hour = 0
+
+                val triggerTime = alarmScheduler.scheduleManualAlarm(hour, minute, "Secondary Brain AI Alarm")
+                if (triggerTime > 0) {
+                    val formatted = String.format("%02d:%02d", hour, minute)
+                    feedback.add("⏰ [AI Action Executed]: Alarm scheduled for $formatted on your Android device.")
+                }
+            } catch (e: Exception) {
+                Log.w("SecondBrainChatEngine", "Alarm action parsing notice: ${e.message}")
+            }
+        }
+
+        // 2. To-Do / Voice Task Creation Action
+        // e.g. "TOOL:ADD_TODO("Buy medicine")" or user says "add to-do buy groceries"
+        if (combinedText.contains("tool:add_todo") || combinedText.startsWith("add todo") || combinedText.startsWith("add task") || combinedText.contains("remind me to")) {
+            try {
+                val taskContent = if (combinedText.contains("tool:add_todo")) {
+                    val start = aiResponse.indexOf("TOOL:ADD_TODO(") + 14
+                    val end = aiResponse.indexOf(")", start)
+                    if (start > 13 && end > start) aiResponse.substring(start, end).replace("\"", "").trim() else userText
+                } else {
+                    userText.replace("add todo", "", ignoreCase = true)
+                        .replace("add task", "", ignoreCase = true)
+                        .replace("remind me to", "", ignoreCase = true)
+                        .trim()
+                }
+
+                if (taskContent.isNotBlank()) {
+                    val taskEntity = VoiceTaskEntity(
+                        title = taskContent,
+                        category = "DUE_DATE",
+                        lectureTitle = "AI Agent Task",
+                        urgencyLevel = "HIGH",
+                        rawVoiceText = userText,
+                        timestamp = System.currentTimeMillis()
+                    )
+                    repository.insertVoiceTask(taskEntity)
+                    feedback.add("📝 [AI Action Executed]: Added to-do task: \"$taskContent\" in Room SQLite & synced to Cloud.")
+                }
+            } catch (e: Exception) {
+                Log.w("SecondBrainChatEngine", "Todo action notice: ${e.message}")
+            }
+        }
+
+        // 3. Location Pin Action
+        // e.g. "TOOL:PIN_LOCATION" or user says "pin my location" / "save gps"
+        if (combinedText.contains("tool:pin_location") || combinedText.contains("pin location") || combinedText.contains("save location") || combinedText.contains("where am i")) {
+            try {
+                GpsLocationHelper.requestLocation(context) { report, err ->
+                    if (report != null) {
+                        firestoreSync.syncLocation(
+                            latitude = report.latitude,
+                            longitude = report.longitude,
+                            accuracyMeters = report.accuracyMeters,
+                            locationLabel = report.locationLabel.ifBlank { "Pinned AI Anchor Point" }
+                        )
+                    }
+                }
+                feedback.add("📍 [AI Action Executed]: Real-time GPS beacon queried and coordinates synced.")
+            } catch (e: Exception) {
+                Log.w("SecondBrainChatEngine", "Location action notice: ${e.message}")
+            }
+        }
+
+        return feedback.joinToString("\n")
     }
 
     private suspend fun generateMultiProviderResponse(

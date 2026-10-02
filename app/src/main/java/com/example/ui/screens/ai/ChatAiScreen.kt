@@ -199,21 +199,21 @@ fun ChatAiScreen(
 
     val quickPrompts = if (isAgentMode) {
         listOf(
+            "⏰ Set 6:30 AM Wakeup Alarm",
+            "📝 Add Task: Review OS Architecture",
+            "📍 Pin Current GPS Coordinates",
             "📸 Take Front Photo",
-            "📍 Ping GPS Location",
-            "🚨 Sound Siren (10s)",
             "🛡️ Wi-Fi ARP Security Scan",
-            "🔋 Battery & Telemetry",
-            "🔇 Enforce Mute"
+            "🔋 Battery & Telemetry"
         )
     } else {
         listOf(
+            "⏰ Set Alarm for 7:00 AM",
+            "📝 Add To-Do: Study & Code",
+            "📍 Pin GPS Location",
             "📊 Steps & Health Check",
-            "📝 Summarize Voice Tasks",
-            "🧠 Search Brain Memory",
-            "📍 Anchored Location Beacon",
-            "💡 Focus Recommendation",
-            "🛡️ Run ARP Security Audit"
+            "🎙️ Transcribe Voice Memo",
+            "🧠 Search Brain Memory"
         )
     }
 

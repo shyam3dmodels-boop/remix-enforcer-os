@@ -29,12 +29,14 @@ import kotlinx.coroutines.launch
 class RelentlessAlarmService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.Default + Job())
     private var torchStrobe: TorchStrobeController? = null
+    private var crescendoController: com.example.core.alarm.crescendo.AlarmCrescendoController? = null
     private var toneJob: Job? = null
     private var vibrator: Vibrator? = null
 
     override fun onCreate() {
         super.onCreate()
         torchStrobe = TorchStrobeController(this)
+        crescendoController = com.example.core.alarm.crescendo.AlarmCrescendoController(this)
 
         vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
@@ -84,16 +86,8 @@ class RelentlessAlarmService : Service() {
         val isVibrateOnly = safetyManager.isVibrateOnly.value
 
         if (!isVibrateOnly) {
-            // Force maximum volume on alarm stream
-            try {
-                val audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-                audioManager?.let { am ->
-                    val maxVol = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
-                    am.setStreamVolume(AudioManager.STREAM_ALARM, maxVol, AudioManager.FLAG_PLAY_SOUND)
-                }
-            } catch (e: Exception) {
-                Log.e("RelentlessAlarmService", "Failed to force volume", e)
-            }
+            // Start gradual crescendo volume ramp (10% to 100% over 30 seconds)
+            crescendoController?.startCrescendo(serviceScope, durationSeconds = 30, startRatio = 0.15f)
 
             // Camera strobe
             torchStrobe?.startStrobe(serviceScope)
@@ -145,6 +139,7 @@ class RelentlessAlarmService : Service() {
 
     private fun stopAlarm() {
         toneJob?.cancel()
+        crescendoController?.stopCrescendo()
         torchStrobe?.stopStrobe()
         vibrator?.cancel()
         AlarmSafetyManager.getInstance(this).setAlarmRinging(false)

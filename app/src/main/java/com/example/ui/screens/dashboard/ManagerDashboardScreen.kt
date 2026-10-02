@@ -121,8 +121,10 @@ fun ManagerDashboardScreen(
     var userThoughtInput by remember { mutableStateOf("") }
     var groqKeyInput by remember { mutableStateOf("") }
 
-    var isAudioPlaying by remember { mutableStateOf(false) }
-    var playbackProgress by remember { mutableFloatStateOf(0.42f) }
+    val isAudioPlaying by viewModel.isAudioPlaying.collectAsState()
+    val audioCurrentPositionMs by viewModel.audioCurrentPositionMs.collectAsState()
+    val audioDurationMs by viewModel.audioDurationMs.collectAsState()
+    val playbackProgress = if (audioDurationMs > 0) (audioCurrentPositionMs.toFloat() / audioDurationMs.toFloat()).coerceIn(0f, 1f) else 0f
 
     val formattedHours = screenTimeMinutes / 60
     val formattedMins = screenTimeMinutes % 60
@@ -223,7 +225,7 @@ fun ManagerDashboardScreen(
                                             color = PaletteCornflower
                                         )
                                         Text(
-                                            text = "Zero-Retention AI Telemetry Hub",
+                                            text = "Your Personal AI Life Assistant",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = KamakuraTextSecondary
                                         )
@@ -305,27 +307,26 @@ fun ManagerDashboardScreen(
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.PhoneAndroid,
-                                            contentDescription = "Device Anchor",
+                                            contentDescription = "Connected Device",
                                             tint = PaletteCornflower,
                                             modifier = Modifier.size(16.dp)
                                         )
                                         Text(
-                                            text = "DEVICE ANCHOR: ",
+                                            text = "Device: ",
                                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                             color = PaletteCornflower
                                         )
                                         Text(
-                                            text = deviceUuid.take(12) + "...",
+                                            text = deviceModel,
                                             style = MaterialTheme.typography.labelSmall.copy(
-                                                fontFamily = FontFamily.Monospace,
                                                 fontWeight = FontWeight.Bold
                                             ),
                                             color = KamakuraTextPrimary
                                         )
                                     }
                                     Text(
-                                        text = "($deviceModel)",
-                                        style = MaterialTheme.typography.labelSmall,
+                                        text = "ID: " + deviceUuid.take(8),
+                                        style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
                                         color = KamakuraTextSecondary
                                     )
                                 }
@@ -350,7 +351,7 @@ fun ManagerDashboardScreen(
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Text(
-                                text = "🧪 REAL-TIME HARDWARE TELEMETRY",
+                                text = "🏃 ACTIVITY & DAILY MOVEMENT",
                                 style = MaterialTheme.typography.titleSmall.copy(
                                     fontWeight = FontWeight.Bold,
                                     letterSpacing = 0.5.sp
@@ -362,9 +363,9 @@ fun ManagerDashboardScreen(
                             MetricRow(
                                 icon = Icons.Default.DirectionsWalk,
                                 iconTint = PaletteCornflower,
-                                label = "Step Sensor Activity",
+                                label = "Daily Steps & Walking",
                                 value = "$steps steps",
-                                subValue = "State: $walkingState • Hardware Accelerometer",
+                                subValue = "Status: $walkingState • Target: 10,000 steps",
                                 progress = (steps.toFloat() / 10000f).coerceIn(0.1f, 1f)
                             )
 
@@ -372,9 +373,9 @@ fun ManagerDashboardScreen(
                             MetricRow(
                                 icon = Icons.Default.Timer,
                                 iconTint = PaletteSoftSky,
-                                label = "Daily Screen Usage",
+                                label = "Screen Time & Focus",
                                 value = screenTimeString,
-                                subValue = "$unlockCount device unlocks today • UsageStats",
+                                subValue = "$unlockCount phone unlocks today",
                                 progress = (screenTimeMinutes.toFloat() / 360f).coerceIn(0.15f, 1f)
                             )
 
@@ -382,9 +383,9 @@ fun ManagerDashboardScreen(
                             MetricRow(
                                 icon = Icons.Default.Sensors,
                                 iconTint = PaletteCornflower,
-                                label = "Proximity Environment",
+                                label = "Nearby Wi-Fi & Area",
                                 value = proximitySummary,
-                                subValue = "Passive Wi-Fi Manager • Ambient RF Mesh",
+                                subValue = "$passiveBssidCount detected study network(s)",
                                 progress = (passiveBssidCount.toFloat() / 10f).coerceIn(0.2f, 1f)
                             )
                         }
@@ -397,13 +398,14 @@ fun ManagerDashboardScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            text = "🎛️ QUICK MANAGER CONTROLLERS",
+                            text = "⚡ QUICK ACTIONS",
                             style = MaterialTheme.typography.titleSmall.copy(
                                 fontWeight = FontWeight.Bold,
                                 letterSpacing = 0.5.sp
                             ),
                             color = PaletteCornflower,
                             modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+                        ) 8.dp)
                         )
 
                         Row(
@@ -669,15 +671,17 @@ fun ManagerDashboardScreen(
                                             shape = CircleShape,
                                             color = PaletteCornflower,
                                             modifier = Modifier
-                                                .size(32.dp)
-                                                .clickable { isAudioPlaying = !isAudioPlaying }
+                                                .size(36.dp)
+                                                .clickable {
+                                                    if (isAudioPlaying) viewModel.playerManager.pause() else viewModel.playerManager.resume()
+                                                }
                                                 .testTag("audio_play_toggle")
                                         ) {
                                             Box(contentAlignment = Alignment.Center) {
                                                 Text(
                                                     text = if (isAudioPlaying) "❚❚" else "▶",
                                                     color = Color.White,
-                                                    fontSize = 11.sp,
+                                                    fontSize = 12.sp,
                                                     fontWeight = FontWeight.Bold
                                                 )
                                             }
@@ -685,7 +689,11 @@ fun ManagerDashboardScreen(
 
                                         Slider(
                                             value = playbackProgress,
-                                            onValueChange = { playbackProgress = it },
+                                            onValueChange = { frac ->
+                                                if (audioDurationMs > 0) {
+                                                    viewModel.playerManager.seekTo((frac * audioDurationMs).toInt())
+                                                }
+                                            },
                                             modifier = Modifier.weight(1f),
                                             colors = SliderDefaults.colors(
                                                 thumbColor = PaletteCornflower,
@@ -801,14 +809,14 @@ fun ManagerDashboardScreen(
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Text(
-                                    text = "ANCHORED GPS COORDINATE LOG",
+                                    text = "📍 PINNED LOCATION & COORDINATES",
                                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                                     color = PaletteCornflower
                                 )
                             }
                             Spacer(modifier = Modifier.height(10.dp))
                             Text(
-                                text = lastPinnedGps ?: "No GPS fix pinned yet. Tap 'Pin GPS' on Overview to record coordinates.",
+                                text = lastPinnedGps ?: "No location pinned yet. Tap 'Pin GPS' on Overview to record your current place.",
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     fontFamily = FontFamily.Monospace,
                                     color = KamakuraTextPrimary
@@ -818,7 +826,7 @@ fun ManagerDashboardScreen(
                     }
                 }
 
-                // 2. Safe Sanctum RF Mesh Log
+                // 2. Wi-Fi & Study Zone Log
                 item(key = "rf_mesh_card") {
                     LiquidGlassCard(
                         modifier = Modifier.fillMaxWidth(),
@@ -832,19 +840,19 @@ fun ManagerDashboardScreen(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Wifi,
-                                    contentDescription = "RF Mesh",
+                                    contentDescription = "Wi-Fi Zone",
                                     tint = PaletteCornflower,
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Text(
-                                    text = "RF MESH & BSSID SANCTUM",
+                                    text = "📡 WI-FI & STUDY ENVIRONMENT",
                                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                                     color = PaletteCornflower
                                 )
                             }
                             Spacer(modifier = Modifier.height(10.dp))
                             Text(
-                                text = "• Active Network: $networkType\n• RF Proximity: $proximitySummary\n• Passive Beacon Verification: $passiveBssidCount detected APs in immediate vicinity.",
+                                text = "• Connected Network: $networkType\n• Study Zone Status: $proximitySummary\n• Nearby Wi-Fi Points: $passiveBssidCount access point(s) detected in range.",
                                 style = MaterialTheme.typography.bodyMedium.copy(color = KamakuraTextPrimary)
                             )
                         }

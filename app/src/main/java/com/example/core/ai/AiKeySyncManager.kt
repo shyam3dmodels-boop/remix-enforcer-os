@@ -131,6 +131,75 @@ class AiKeySyncManager private constructor(private val context: Context) {
                 iconEmoji = "⚡",
                 badge = "300 T/s",
                 description = "LPU inference speed for instant, zero-latency answers."
+            ),
+            ModelOption(
+                id = "deepseek-r1-distill-llama-70b",
+                displayName = "Groq DeepSeek R1 70B",
+                provider = "groq",
+                iconEmoji = "🧠",
+                badge = "Fast CoT",
+                description = "DeepSeek R1 reasoning at 300+ tokens/sec on Groq LPUs."
+            ),
+            // Cerebras
+            ModelOption(
+                id = "llama3.3-70b",
+                displayName = "Cerebras LLaMA 3.3 70B",
+                provider = "cerebras",
+                iconEmoji = "🚀",
+                badge = "1800 T/s",
+                description = "World's fastest inference speed on Wafer-Scale Engine hardware."
+            ),
+            // SambaNova
+            ModelOption(
+                id = "DeepSeek-R1",
+                displayName = "SambaNova DeepSeek R1 671B",
+                provider = "sambanova",
+                iconEmoji = "⚡",
+                badge = "Full Precision",
+                description = "Free full-precision 671B DeepSeek R1 on SambaNova DataScale."
+            ),
+            // OpenAI
+            ModelOption(
+                id = "gpt-4o",
+                displayName = "OpenAI GPT-4o",
+                provider = "openai",
+                iconEmoji = "🟢",
+                badge = "Omni Multi",
+                description = "Flagship multimodal vision, audio, and reasoning from OpenAI."
+            ),
+            ModelOption(
+                id = "gpt-4o-mini",
+                displayName = "OpenAI GPT-4o Mini",
+                provider = "openai",
+                iconEmoji = "🟢",
+                badge = "Fast & Cheap",
+                description = "High-speed compact multimodal intelligence."
+            ),
+            // Mistral AI
+            ModelOption(
+                id = "mistral-large-latest",
+                displayName = "Mistral Large 2",
+                provider = "mistral",
+                iconEmoji = "🌊",
+                badge = "128K Context",
+                description = "Flagship reasoning, multilingual nuance, and coding."
+            ),
+            // Local Ollama / Termux
+            ModelOption(
+                id = "ollama/deepseek-r1:1.5b",
+                displayName = "Local DeepSeek R1 (1.5B)",
+                provider = "ollama",
+                iconEmoji = "🦙",
+                badge = "100% Offline",
+                description = "Runs locally on device ARM64 CPU via Termux llama-server with zero cloud access."
+            ),
+            ModelOption(
+                id = "ollama/qwen2.5:1.5b",
+                displayName = "Local Qwen 2.5 (1.5B)",
+                provider = "ollama",
+                iconEmoji = "🦙",
+                badge = "100% Offline",
+                description = "Fast local general dialogue and formatting."
             )
         )
 
