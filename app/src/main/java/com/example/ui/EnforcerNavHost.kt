@@ -87,6 +87,7 @@ sealed class Screen(val route: String, val title: String, val subtitle: String, 
     data object Tasks : Screen("tasks", "Voice Tasks", "Smart Action Items", Icons.Default.Assignment)
     data object Alarm : Screen("alarm", "Smart Alarms", "Relentless Challenge Alarms", Icons.Default.Alarm)
     data object Recorder : Screen("recorder", "Audio Recorder", "Ambient Notes & Transcripts", Icons.Default.Mic)
+    data object ShellMind : Screen("shellmind", "ShellMind AI", "Natural Language Terminal", Icons.Default.SmartToy)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -186,13 +187,13 @@ fun EnforcerNavHost(
                                 ) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
-                                            text = "🔐 Encrypted Device Vault",
+                                            text = "🛡️ Private Local Vault",
                                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                             color = PaletteCornflower
                                         )
                                     }
                                     Text(
-                                        text = "Zero-Retention",
+                                        text = "Zero Cloud Retention",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = PaletteCornflower
                                     )
@@ -329,7 +330,10 @@ fun EnforcerNavHost(
                                             modifier = Modifier
                                                 .size(6.dp)
                                                 .clip(CircleShape)
-                                                .background(Color(0xFF10B981))
+                                                .background(
+                                                    if (networkType.equals("Offline", ignoreCase = true)) Color(0xFFEF4444)
+                                                    else Color(0xFF10B981)
+                                                )
                                         )
                                     }
                                     Text(
@@ -419,7 +423,11 @@ fun EnforcerNavHost(
                 NavHost(
                     navController = navController,
                     startDestination = Screen.Dashboard.route,
-                    modifier = Modifier.padding(innerPadding)
+                    modifier = Modifier.padding(innerPadding),
+                    enterTransition = { fadeIn(tween(220)) },
+                    exitTransition = { fadeOut(tween(180)) },
+                    popEnterTransition = { fadeIn(tween(220)) },
+                    popExitTransition = { fadeOut(tween(180)) }
                 ) {
                     composable(Screen.Dashboard.route) {
                         DashboardScreen(
@@ -443,7 +451,7 @@ fun EnforcerNavHost(
                                 navController.popBackStack()
                             },
                             onNavigateToShellMind = {
-                                navController.navigate("shellmind")
+                                navController.navigate(Screen.ShellMind.route)
                             }
                         )
                     }
@@ -459,7 +467,7 @@ fun EnforcerNavHost(
                             onNavigateToUploads = {}
                         )
                     }
-                    composable("shellmind") {
+                    composable(Screen.ShellMind.route) {
                         com.example.ui.screens.shellmind.ShellMindStudioScreen(
                             onNavigateBack = {
                                 navController.popBackStack()

@@ -1,7 +1,9 @@
 package com.example.core.recorder
 
+import android.app.NotificationManager
 import android.content.Context
 import android.util.Log
+import androidx.core.app.NotificationCompat
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
@@ -99,29 +101,31 @@ class TelegramUploadWorker(
         )
 
         if (botToken.isBlank() || chatId.isBlank()) {
-            Log.w(TAG, "Telegram Bot Token or Chat ID not configured. Retrying when configured...")
-            config.updateStatus("Waiting for Telegram Bot Token & Chat ID...")
+            val errMsg = "Telegram Bot Token or Chat ID not configured. Please configure in Settings."
+            Log.e(TAG, errMsg)
+            config.updateStatus(errMsg)
             config.updateQueueItem(
                 id = queueId,
                 chunkTitle = "$lectureTitle #$chunkIndex",
                 chunkIndex = chunkIndex,
                 totalBytes = fileSizeBytes,
                 bytesTransferred = 0L,
-                status = UploadQueueStatus.FAILED_RETRYING,
+                status = UploadQueueStatus.FAILED_PERMANENT,
                 retryCount = currentRunAttempt,
-                statusMessage = "Awaiting Bot Token & Chat ID"
+                statusMessage = "Missing Bot Token or Chat ID"
             )
             setProgress(
                 workDataOf(
                     KEY_PROGRESS_PERCENT to 0,
                     KEY_PROGRESS_BYTES_SENT to 0L,
                     KEY_PROGRESS_TOTAL_BYTES to fileSizeBytes,
-                    KEY_PROGRESS_STATUS_MSG to "Awaiting Bot Token & Chat ID",
+                    KEY_PROGRESS_STATUS_MSG to "Permanent Error: Credentials missing",
                     KEY_LECTURE_TITLE to lectureTitle,
                     KEY_CHUNK_INDEX to chunkIndex
                 )
             )
-            return@withContext Result.retry()
+            notifyUploadFailure("Upload Failed: Credentials Missing", "Please configure your Telegram Bot Token & Chat ID in Settings.")
+            return@withContext Result.failure(workDataOf(KEY_PROGRESS_STATUS_MSG to errMsg))
         }
 
         Log.i(TAG, "Uploading chunk #$chunkIndex ($fileSizeBytes bytes) to Telegram Bot...")
@@ -222,10 +226,71 @@ class TelegramUploadWorker(
                     KEY_PROGRESS_STATUS_MSG to "Uploaded & local file wiped (0 MB)"
                 )
                 Result.success(successData)
+            } else if (responseCode in 400..404) {
+                // Permanent client auth error (bad token, invalid chat ID, blocked)
+                Log.e(TAG, "Telegram upload permanently failed with client error HTTP $responseCode: $bodyString")
+                val errMsg = "HTTP $responseCode: Invalid Bot Token or Chat ID"
+                config.updateStatus(errMsg)
+                config.updateQueueItem(
+                    id = queueId,
+                    chunkTitle = "$lectureTitle #$chunkIndex",
+                    chunkIndex = chunkIndex,
+                    totalBytes = fileSizeBytes,
+                    bytesTransferred = 0L,
+                    status = UploadQueueStatus.FAILED_PERMANENT,
+                    retryCount = currentRunAttempt,
+                    statusMessage = errMsg
+                )
+                notifyUploadFailure("Telegram Upload Rejected ($responseCode)", "Check Bot Token & Chat ID permissions.")
+                Result.failure(workDataOf(KEY_PROGRESS_STATUS_MSG to errMsg))
             } else {
                 Log.e(TAG, "Telegram upload failed with HTTP $responseCode: $bodyString")
                 val errMsg = "HTTP $responseCode: Retrying on reconnect"
                 config.updateStatus(errMsg)
+                if (currentRunAttempt >= 5) {
+                    config.updateQueueItem(
+                        id = queueId,
+                        chunkTitle = "$lectureTitle #$chunkIndex",
+                        chunkIndex = chunkIndex,
+                        totalBytes = fileSizeBytes,
+                        bytesTransferred = 0L,
+                        status = UploadQueueStatus.FAILED_PERMANENT,
+                        retryCount = currentRunAttempt + 1,
+                        statusMessage = "Max retries exceeded ($responseCode)"
+                    )
+                    notifyUploadFailure("Upload Failed after 5 Retries", "HTTP $responseCode: $lectureTitle #$chunkIndex")
+                    Result.failure(workDataOf(KEY_PROGRESS_STATUS_MSG to "Max retries exceeded"))
+                } else {
+                    config.updateQueueItem(
+                        id = queueId,
+                        chunkTitle = "$lectureTitle #$chunkIndex",
+                        chunkIndex = chunkIndex,
+                        totalBytes = fileSizeBytes,
+                        bytesTransferred = 0L,
+                        status = UploadQueueStatus.FAILED_RETRYING,
+                        retryCount = currentRunAttempt + 1,
+                        statusMessage = errMsg
+                    )
+                    Result.retry()
+                }
+            }
+        } catch (e: IOException) {
+            Log.e(TAG, "Network failure uploading audio chunk to Telegram. Retrying...", e)
+            config.updateStatus("Offline. WorkManager queued for network reconnect.")
+            if (currentRunAttempt >= 5) {
+                config.updateQueueItem(
+                    id = queueId,
+                    chunkTitle = "$lectureTitle #$chunkIndex",
+                    chunkIndex = chunkIndex,
+                    totalBytes = fileSizeBytes,
+                    bytesTransferred = 0L,
+                    status = UploadQueueStatus.FAILED_PERMANENT,
+                    retryCount = currentRunAttempt + 1,
+                    statusMessage = "Network failed after 5 retries"
+                )
+                notifyUploadFailure("Upload Offline Timeout", "Unable to upload $lectureTitle chunk after 5 retries.")
+                Result.failure(workDataOf(KEY_PROGRESS_STATUS_MSG to "Network timeout"))
+            } else {
                 config.updateQueueItem(
                     id = queueId,
                     chunkTitle = "$lectureTitle #$chunkIndex",
@@ -234,47 +299,38 @@ class TelegramUploadWorker(
                     bytesTransferred = 0L,
                     status = UploadQueueStatus.FAILED_RETRYING,
                     retryCount = currentRunAttempt + 1,
-                    statusMessage = errMsg
-                )
-                setProgress(
-                    workDataOf(
-                        KEY_PROGRESS_PERCENT to 0,
-                        KEY_PROGRESS_BYTES_SENT to 0L,
-                        KEY_PROGRESS_TOTAL_BYTES to fileSizeBytes,
-                        KEY_PROGRESS_STATUS_MSG to errMsg,
-                        KEY_LECTURE_TITLE to lectureTitle,
-                        KEY_CHUNK_INDEX to chunkIndex
-                    )
+                    statusMessage = "Network offline - Queued for reconnect"
                 )
                 Result.retry()
             }
-        } catch (e: IOException) {
-            Log.e(TAG, "Network failure uploading audio chunk to Telegram. Retrying...", e)
-            config.updateStatus("Offline. WorkManager queued for network reconnect.")
-            config.updateQueueItem(
-                id = queueId,
-                chunkTitle = "$lectureTitle #$chunkIndex",
-                chunkIndex = chunkIndex,
-                totalBytes = fileSizeBytes,
-                bytesTransferred = 0L,
-                status = UploadQueueStatus.FAILED_RETRYING,
-                retryCount = currentRunAttempt + 1,
-                statusMessage = "Network offline - Queued for reconnect"
-            )
-            Result.retry()
         } catch (e: Exception) {
             Log.e(TAG, "Unexpected error in TelegramUploadWorker", e)
-            config.updateQueueItem(
-                id = queueId,
-                chunkTitle = "$lectureTitle #$chunkIndex",
-                chunkIndex = chunkIndex,
-                totalBytes = fileSizeBytes,
-                bytesTransferred = 0L,
-                status = UploadQueueStatus.FAILED_RETRYING,
-                retryCount = currentRunAttempt + 1,
-                statusMessage = "Error: ${e.localizedMessage ?: "Unknown"}"
-            )
-            Result.retry()
+            if (currentRunAttempt >= 5) {
+                config.updateQueueItem(
+                    id = queueId,
+                    chunkTitle = "$lectureTitle #$chunkIndex",
+                    chunkIndex = chunkIndex,
+                    totalBytes = fileSizeBytes,
+                    bytesTransferred = 0L,
+                    status = UploadQueueStatus.FAILED_PERMANENT,
+                    retryCount = currentRunAttempt + 1,
+                    statusMessage = "Permanent error: ${e.localizedMessage ?: "Unknown"}"
+                )
+                notifyUploadFailure("Upload Error", e.localizedMessage ?: "Unknown error")
+                Result.failure(workDataOf(KEY_PROGRESS_STATUS_MSG to (e.localizedMessage ?: "Error")))
+            } else {
+                config.updateQueueItem(
+                    id = queueId,
+                    chunkTitle = "$lectureTitle #$chunkIndex",
+                    chunkIndex = chunkIndex,
+                    totalBytes = fileSizeBytes,
+                    bytesTransferred = 0L,
+                    status = UploadQueueStatus.FAILED_RETRYING,
+                    retryCount = currentRunAttempt + 1,
+                    statusMessage = "Error: ${e.localizedMessage ?: "Unknown"}"
+                )
+                Result.retry()
+            }
         }
     }
 
@@ -308,6 +364,23 @@ class TelegramUploadWorker(
             }
         } catch (e: Exception) {
             Log.w(TAG, "Could not update Room record after wipe", e)
+        }
+    }
+
+    private fun notifyUploadFailure(title: String, reason: String) {
+        try {
+            val nm = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
+            val notification = NotificationCompat.Builder(applicationContext, "chunk_recorder_channel")
+                .setSmallIcon(android.R.drawable.stat_notify_error)
+                .setContentTitle("⚠️ $title")
+                .setContentText(reason)
+                .setStyle(NotificationCompat.BigTextStyle().bigText("$title: $reason"))
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setAutoCancel(true)
+                .build()
+            nm.notify(TAG_TELEGRAM_UPLOAD.hashCode() + (1..1000).random(), notification)
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not dispatch failure notification", e)
         }
     }
 

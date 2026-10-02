@@ -23,7 +23,8 @@ enum class UploadQueueStatus {
     QUEUED,
     IN_FLIGHT,
     COMPLETED,
-    FAILED_RETRYING
+    FAILED_RETRYING,
+    FAILED_PERMANENT
 }
 
 /**

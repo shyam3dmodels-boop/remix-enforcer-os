@@ -204,7 +204,7 @@ class EnforcerRepository(
                 AiKeyEntity("nvidia", "", "nvidia/llama-3.1-nemotron-70b-instruct", true),
                 AiKeyEntity("deepseek", "", "deepseek-chat", true),
                 AiKeyEntity("openrouter", "", "anthropic/claude-3.5-sonnet", true),
-                AiKeyEntity("groq", "gsk_K58U6OirwzD7HwA6tY6ZWGdyb3FYp9Z1bZ4z3WvC7M9x0A2B1C", "llama-3.3-70b-versatile", true)
+                AiKeyEntity("groq", "", "llama-3.3-70b-versatile", true)
             )
             aiKeyDao.insertAll(defaultKeys)
         }

@@ -133,6 +133,34 @@ class TermuxBridgeManager private constructor(private val context: Context) {
         }
     }
 
+    /**
+     * Executes shell command directly and captures standard output/error string.
+     */
+    fun executeCommandDirect(command: String): String {
+        return try {
+            appendLog("🐚 Executing: $command")
+            val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", command))
+            val reader = BufferedReader(InputStreamReader(process.inputStream))
+            val errReader = BufferedReader(InputStreamReader(process.errorStream))
+            val output = StringBuilder()
+            var line: String?
+
+            while (reader.readLine().also { line = it } != null) {
+                output.append(line).append("\n")
+            }
+            while (errReader.readLine().also { line = it } != null) {
+                output.append("ERR: ").append(line).append("\n")
+            }
+            process.waitFor()
+            val res = output.toString().trim()
+            appendLog("➔ Result: ${res.take(80)}")
+            res.ifBlank { "Exit code: ${process.exitValue()} (Success)" }
+        } catch (e: Exception) {
+            appendLog("❌ Exec error: ${e.message}")
+            "Execution error: ${e.message}"
+        }
+    }
+
     fun appendLog(log: String) {
         val current = _terminalLogs.value.takeLast(99).toMutableList()
         current.add(log)

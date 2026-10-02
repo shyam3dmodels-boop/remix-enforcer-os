@@ -322,8 +322,9 @@ class SecondBrainChatEngine private constructor(private val context: Context) {
                     }
                 }
                 "groq" -> {
-                    val groqKey = if (apiKey.isNotBlank()) apiKey else groqManager.apiKey.value.ifBlank {
-                        "gsk_K58U6OirwzD7HwA6tY6ZWGdyb3FYp9Z1bZ4z3WvC7M9x0A2B1C"
+                    val groqKey = if (apiKey.isNotBlank()) apiKey else groqManager.apiKey.value
+                    if (groqKey.isBlank()) {
+                        throw IllegalStateException("Groq API key is not configured. Please add your key in AI Hub or Settings.")
                     }
                     return callOpenAiCompatible(
                         url = "https://api.groq.com/openai/v1/chat/completions",

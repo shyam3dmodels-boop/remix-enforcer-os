@@ -107,17 +107,32 @@ import com.example.ui.theme.LiquidGlassFill
 import com.example.ui.theme.PaletteCornflower
 import com.example.ui.theme.PaletteIceCyan
 import com.example.ui.theme.PaletteMintFrost
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.EditLocation
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import com.example.core.user.UserProfileManager
 import com.example.ui.theme.PaletteSoftSky
 import java.util.Calendar
 
-private fun getTimeBasedGreeting(): String {
+private fun getTimeBasedGreeting(userName: String): String {
     val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-    return when (hour) {
-        in 5..11 -> "Good Morning, Harsh ☀️"
-        in 12..16 -> "Good Afternoon, Harsh 🌤️"
-        in 17..21 -> "Good Evening, Harsh ✨"
-        else -> "Good Night, Harsh 🌙"
+    val timeGreeting = when (hour) {
+        in 5..11 -> "Good Morning"
+        in 12..16 -> "Good Afternoon"
+        in 17..21 -> "Good Evening"
+        else -> "Good Night"
     }
+    val emoji = when (hour) {
+        in 5..11 -> "☀️"
+        in 12..16 -> "🌤️"
+        in 17..21 -> "✨"
+        else -> "🌙"
+    }
+    return "$timeGreeting, $userName $emoji"
 }
 
 @Composable
@@ -127,6 +142,18 @@ fun DashboardScreen(
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
+
+    // User Profile & Custom Location Customizer
+    val userProfileManager = remember { UserProfileManager.getInstance(context) }
+    val userName by userProfileManager.userName.collectAsStateWithLifecycle()
+    val userLocation by userProfileManager.locationLabel.collectAsStateWithLifecycle()
+    val userLat by userProfileManager.latitude.collectAsStateWithLifecycle()
+    val userLon by userProfileManager.longitude.collectAsStateWithLifecycle()
+    val userBio by userProfileManager.userBio.collectAsStateWithLifecycle()
+    val userHandle by userProfileManager.telegramHandle.collectAsStateWithLifecycle()
+    val userDirective by userProfileManager.customDirective.collectAsStateWithLifecycle()
+
+    var showProfileDialog by remember { mutableStateOf(false) }
 
     // Telemetry & Hardware States
     val batteryStatus by viewModel.batteryStatus.collectAsStateWithLifecycle()
@@ -159,6 +186,32 @@ fun DashboardScreen(
         showActionToast = null
     }
 
+    if (showProfileDialog) {
+        UserProfileCustomizerDialog(
+            currentName = userName,
+            currentLocation = userLocation,
+            currentLat = userLat,
+            currentLon = userLon,
+            currentBio = userBio,
+            currentHandle = userHandle,
+            currentDirective = userDirective,
+            onDismiss = { showProfileDialog = false },
+            onSave = { newName, newLoc, newLat, newLon, newBio, newHandle, newDirective ->
+                userProfileManager.updateProfile(
+                    name = newName,
+                    location = newLoc,
+                    lat = newLat,
+                    lon = newLon,
+                    bio = newBio,
+                    handle = newHandle,
+                    directive = newDirective
+                )
+                showProfileDialog = false
+                showActionToast = "Profile & Location Updated: $newName ($newLoc)"
+            }
+        )
+    }
+
     KamakuraSkyBackground {
         Column(
             modifier = Modifier
@@ -187,7 +240,7 @@ fun DashboardScreen(
                     ) {
                         Column {
                             Text(
-                                text = getTimeBasedGreeting(),
+                                text = getTimeBasedGreeting(userName),
                                 fontSize = 20.sp,
                                 fontWeight = FontWeight.Black,
                                 color = KamakuraSignBlue,
@@ -212,19 +265,29 @@ fun DashboardScreen(
                             }
                         }
 
-                        // Cloud Host Status Pill
+                        // Profile & Location Edit Chip
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = PaletteMintFrost.copy(alpha = 0.85f),
-                            border = BorderStroke(1.dp, PaletteSoftSky)
+                            color = PaletteMintFrost.copy(alpha = 0.90f),
+                            border = BorderStroke(1.dp, PaletteSoftSky),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { showProfileDialog = true }
+                                .testTag("edit_profile_chip")
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
+                                Icon(
+                                    imageVector = Icons.Default.LocationOn,
+                                    contentDescription = "Edit Location",
+                                    tint = PaletteCornflower,
+                                    modifier = Modifier.size(13.dp)
+                                )
                                 Text(
-                                    text = "🟢 LIVE",
+                                    text = userLocation.take(12) + if (userLocation.length > 12) "..." else "",
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     color = PaletteCornflower
@@ -817,3 +880,147 @@ private fun BentoLaunchpadTile(
         }
     }
 }
+
+@Composable
+fun UserProfileCustomizerDialog(
+    currentName: String,
+    currentLocation: String,
+    currentLat: Double,
+    currentLon: Double,
+    currentBio: String,
+    currentHandle: String,
+    currentDirective: String,
+    onDismiss: () -> Unit,
+    onSave: (name: String, location: String, lat: Double, lon: Double, bio: String, handle: String, directive: String) -> Unit
+) {
+    var name by remember { mutableStateOf(currentName) }
+    var location by remember { mutableStateOf(currentLocation) }
+    var latText by remember { mutableStateOf(currentLat.toString()) }
+    var lonText by remember { mutableStateOf(currentLon.toString()) }
+    var bio by remember { mutableStateOf(currentBio) }
+    var handle by remember { mutableStateOf(currentHandle) }
+    var directive by remember { mutableStateOf(currentDirective) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.AccountCircle,
+                    contentDescription = "Profile Settings",
+                    tint = PaletteCornflower,
+                    modifier = Modifier.size(24.dp)
+                )
+                Text(
+                    text = "Customize Identity & Location",
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Black,
+                    color = PaletteCornflower
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "Customize your identity, default GPS coordinates, and AI system directives.",
+                    fontSize = 11.sp,
+                    color = KamakuraTextSecondary
+                )
+
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Your Name", fontSize = 12.sp) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = location,
+                    onValueChange = { location = it },
+                    label = { Text("Location Name / Address", fontSize = 12.sp) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = latText,
+                        onValueChange = { latText = it },
+                        label = { Text("Latitude", fontSize = 11.sp) },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = lonText,
+                        onValueChange = { lonText = it },
+                        label = { Text("Longitude", fontSize = 11.sp) },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                OutlinedTextField(
+                    value = handle,
+                    onValueChange = { handle = it },
+                    label = { Text("Telegram Handle", fontSize = 12.sp) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = bio,
+                    onValueChange = { bio = it },
+                    label = { Text("Bio / Subtitle", fontSize = 12.sp) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = directive,
+                    onValueChange = { directive = it },
+                    label = { Text("AI Persona Directives", fontSize = 12.sp) },
+                    maxLines = 3,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val parsedLat = latText.toDoubleOrNull() ?: currentLat
+                    val parsedLon = lonText.toDoubleOrNull() ?: currentLon
+                    onSave(name, location, parsedLat, parsedLon, bio, handle, directive)
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = PaletteCornflower)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Save,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Save Profile", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) {
+                Text("Cancel", color = Color.Gray)
+            }
+        },
+        containerColor = Color.White,
+        shape = RoundedCornerShape(20.dp)
+    )
+}
+

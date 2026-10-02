@@ -130,6 +130,12 @@ private fun ModernDockItem(
         label = "dock_content_color"
     )
 
+    val scale by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isSelected) 1.05f else 1.0f,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "dock_item_scale"
+    )
+
     val itemPaddingHorizontal by animateDpAsState(
         targetValue = if (isSelected) 14.dp else 10.dp,
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
@@ -140,6 +146,10 @@ private fun ModernDockItem(
         shape = RoundedCornerShape(20.dp),
         color = containerColor,
         modifier = Modifier
+            .androidx.compose.ui.graphics.graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
             .clip(RoundedCornerShape(20.dp))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },

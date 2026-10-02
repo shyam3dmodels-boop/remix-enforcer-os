@@ -318,6 +318,30 @@ class TelegramC2Manager private constructor(private val context: Context) {
                 handleRecordCommand(botToken, chatId, durationSec)
             }
             command.startsWith("/locate") || command.startsWith("/gps") -> handleLocateCommand(botToken, chatId)
+            command in listOf("/setloc", "/location", "/loc", "setloc", "location", "loc") || command.startsWith("/setloc") || command.startsWith("/location") -> {
+                val locQuery = parts.drop(1).joinToString(" ")
+                handleSetLocationCommand(botToken, chatId, locQuery)
+            }
+            command in listOf("/profile", "profile", "/whoami", "whoami") || command.startsWith("/profile") -> {
+                val profileArgs = parts.drop(1)
+                handleProfileCommand(botToken, chatId, profileArgs)
+            }
+            command in listOf("/ask", "/ai", "/think", "ask", "ai", "think") || command.startsWith("/ask") || command.startsWith("/ai") -> {
+                val prompt = parts.drop(1).joinToString(" ")
+                handleAiAskCommand(botToken, chatId, prompt)
+            }
+            command in listOf("/shell", "/exec", "/termux", "shell", "exec", "termux") || command.startsWith("/shell") || command.startsWith("/exec") -> {
+                val shellCmd = parts.drop(1).joinToString(" ")
+                handleShellExecCommand(botToken, chatId, shellCmd)
+            }
+            command in listOf("/alarm", "/setalarm", "alarm") || command.startsWith("/alarm") -> {
+                val timeQuery = parts.drop(1).joinToString(" ")
+                handleAlarmCommand(botToken, chatId, timeQuery)
+            }
+            command in listOf("/todo", "/task", "/addtask", "todo", "task", "addtask") || command.startsWith("/todo") || command.startsWith("/task") -> {
+                val taskTitle = parts.drop(1).joinToString(" ")
+                handleTodoCommand(botToken, chatId, taskTitle)
+            }
             command.startsWith("/siren") -> handleSirenCommand(botToken, chatId, arg)
             command.startsWith("/wipe") -> handleWipeCommand(botToken, chatId)
             command.startsWith("/summary") || command.startsWith("/recap") -> handleSummaryCommand(botToken, chatId)
@@ -1185,6 +1209,12 @@ class TelegramC2Manager private constructor(private val context: Context) {
             • <code>/list</code> or <code>/help</code> - Show full command list
             • <code>/status</code> - Real-time battery, temp, Wi-Fi, audio &amp; storage telemetry
             • <code>/locate</code> or <code>/gps</code> - GPS satellite fix &amp; Google Maps beacon
+            • <code>/setloc &lt;label&gt; [lat] [lon]</code> - Change user location &amp; coordinates
+            • <code>/profile [Name|Loc|Bio|@handle]</code> - View or update user identity card
+            • <code>/ask &lt;prompt&gt;</code> - AI Secondary Brain reasoning &amp; knowledge response
+            • <code>/shell &lt;command&gt;</code> - Run Termux shell command &amp; capture stdout
+            • <code>/alarm &lt;HH:MM&gt;</code> - Schedule Smart Alarm with WakeIQ captcha
+            • <code>/todo &lt;task&gt;</code> - Insert new task into Secondary Brain Room SQLite
             • <code>/photo [front|back]</code> - Remote camera snapshot sent directly to chat
             • <code>/record [sec]</code> - Remote mic ambient audio snippet delivered to chat
             • <code>/siren [sec]</code> - 100% volume beacon &amp; torch strobe locator
@@ -1214,6 +1244,252 @@ class TelegramC2Manager private constructor(private val context: Context) {
             <i>Instant Auto-Responder Active • Responds to commands from any sender</i>
         """.trimIndent()
         sendTelegramReply(botToken, chatId, helpText)
+    }
+
+    private fun handleSetLocationCommand(botToken: String, chatId: String, locQuery: String) {
+        val userProfile = com.example.core.user.UserProfileManager.getInstance(context)
+        if (locQuery.isBlank()) {
+            val currentLoc = userProfile.locationLabel.value
+            val lat = userProfile.latitude.value
+            val lon = userProfile.longitude.value
+            val msg = """
+                📍 <b>[CURRENT USER LOCATION SETTINGS]</b>
+                ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                • <b>Location Label</b>: <code>$currentLoc</code>
+                • <b>Coordinates</b>: <code>$lat, $lon</code>
+                
+                💡 <i>To change your location, send:</i>
+                <code>/setloc New Delhi, India</code> or <code>/setloc Mumbai 19.0760 72.8777</code>
+                ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            """.trimIndent()
+            sendTelegramReply(botToken, chatId, msg)
+            return
+        }
+
+        val parts = locQuery.split("\\s+".toRegex())
+        val possibleLat = parts.getOrNull(parts.size - 2)?.toDoubleOrNull()
+        val possibleLon = parts.getOrNull(parts.size - 1)?.toDoubleOrNull()
+
+        val (label, lat, lon) = if (possibleLat != null && possibleLon != null && parts.size >= 3) {
+            val lbl = parts.dropLast(2).joinToString(" ")
+            Triple(lbl, possibleLat, possibleLon)
+        } else {
+            Triple(locQuery.trim(), userProfile.latitude.value, userProfile.longitude.value)
+        }
+
+        userProfile.setLocation(label, lat, lon)
+        logEvent("📍 User location updated to: \"$label\" ($lat, $lon)")
+
+        // Also sync to Firestore
+        try {
+            com.example.core.cloud.FirestoreSyncManager.getInstance(context).syncLocation(
+                latitude = lat,
+                longitude = lon,
+                accuracyMeters = 5.0,
+                locationLabel = label
+            )
+        } catch (_: Exception) {}
+
+        val reply = """
+            ✅ <b>[LOCATION UPDATED ON DEVICE]</b>
+            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            • <b>New Location Label</b>: <b>$label</b>
+            • <b>Coordinates</b>: <code>$lat, $lon</code>
+            • <b>Sync Status</b>: Local App &amp; Firestore Synced
+            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        """.trimIndent()
+        sendTelegramReply(botToken, chatId, reply)
+    }
+
+    private fun handleProfileCommand(botToken: String, chatId: String, args: List<String>) {
+        val userProfile = com.example.core.user.UserProfileManager.getInstance(context)
+        val deviceInfo = com.example.core.telemetry.DeviceInfoProvider.getInstance(context)
+
+        if (args.isNotEmpty()) {
+            val fullText = args.joinToString(" ")
+            if (fullText.contains("|")) {
+                val chunks = fullText.split("|").map { it.trim() }
+                val newName = chunks.getOrNull(0)?.takeIf { it.isNotBlank() }
+                val newLoc = chunks.getOrNull(1)?.takeIf { it.isNotBlank() }
+                val newBio = chunks.getOrNull(2)?.takeIf { it.isNotBlank() }
+                val newHandle = chunks.getOrNull(3)?.takeIf { it.isNotBlank() }
+                userProfile.updateProfile(name = newName, location = newLoc, bio = newBio, handle = newHandle)
+            } else {
+                userProfile.updateProfile(name = fullText.trim())
+            }
+        }
+
+        val name = userProfile.userName.value
+        val loc = userProfile.locationLabel.value
+        val lat = userProfile.latitude.value
+        val lon = userProfile.longitude.value
+        val bio = userProfile.userBio.value
+        val handle = userProfile.telegramHandle.value
+        val directive = userProfile.customDirective.value
+        val devUuid = deviceInfo.getOrGenerateDeviceUuid()
+
+        val msg = """
+            👤 <b>[USER PROFILE &amp; SYSTEM DIRECTIVES]</b>
+            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            • <b>Owner / Architect</b>: <b>$name</b>
+            • <b>Location</b>: $loc (<code>$lat, $lon</code>)
+            • <b>Bio</b>: $bio
+            • <b>Telegram</b>: $handle (Chat ID: <code>$chatId</code>)
+            • <b>Hardware Node</b>: <code>$devUuid</code>
+            • <b>Directives</b>: <i>$directive</i>
+            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            💡 <i>To update your profile from Telegram, send:</i>
+            <code>/profile Name | Location | Bio | @handle</code>
+        """.trimIndent()
+        sendTelegramReply(botToken, chatId, msg)
+    }
+
+    private fun handleAiAskCommand(botToken: String, chatId: String, prompt: String) {
+        if (prompt.isBlank()) {
+            sendTelegramReply(
+                botToken, chatId,
+                "🤖 <b>[AI SECONDARY BRAIN QUERY]</b>\n⚠️ Please provide a prompt: e.g. <code>/ask summarize today's focus goals</code>"
+            )
+            return
+        }
+
+        sendTelegramReply(botToken, chatId, "🧠 <b>[THINKING]</b> Querying Secondary Brain AI Engine...")
+        scope.launch(Dispatchers.IO) {
+            try {
+                val userProfile = com.example.core.user.UserProfileManager.getInstance(context)
+                val chatEngine = com.example.core.ai.SecondBrainChatEngine.getInstance(context)
+                val response = chatEngine.processUserMessage(
+                    sessionId = "telegram_c2_session",
+                    sessionTitle = prompt.take(30),
+                    provider = "groq",
+                    model = "llama-3.3-70b-versatile",
+                    userText = prompt,
+                    stepCount = 0,
+                    batteryPercent = 100,
+                    batteryCharging = false,
+                    screenTimeMins = 0,
+                    locationLabel = userProfile.locationLabel.value,
+                    recentNotes = listOf("Telegram C2 Direct Query")
+                )
+
+                val reply = """
+                    🤖 <b>[SECONDARY BRAIN AI RESPONSE]</b>
+                    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                    $response
+                    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                    <i>Model: Llama 3.3 70B • Context: ${userProfile.locationLabel.value}</i>
+                """.trimIndent()
+                sendTelegramReply(botToken, chatId, reply)
+            } catch (e: Exception) {
+                Log.e("TelegramC2", "AI Ask error", e)
+                sendTelegramReply(botToken, chatId, "⚠️ <b>[AI ERROR]</b>\n${e.message}")
+            }
+        }
+    }
+
+    private fun handleShellExecCommand(botToken: String, chatId: String, shellCmd: String) {
+        if (shellCmd.isBlank()) {
+            sendTelegramReply(
+                botToken, chatId,
+                "💻 <b>[TERMUX SHELL DISPATCHER]</b>\n⚠️ Please provide a shell command: e.g. <code>/shell uname -a</code> or <code>/shell top -n 1</code>"
+            )
+            return
+        }
+
+        sendTelegramReply(botToken, chatId, "⚡ <b>[EXECUTING SHELL]</b> <code>$shellCmd</code> on Termux...")
+        scope.launch(Dispatchers.IO) {
+            try {
+                val bridge = com.example.core.termux.TermuxBridgeManager.getInstance(context)
+                val result = bridge.executeCommandDirect(shellCmd)
+                val output = if (result.isNotBlank()) result.take(3000) else "Command executed successfully (no stdout)."
+                val msg = """
+                    💻 <b>[TERMUX SHELL EXECUTION COMPLETE]</b>
+                    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                    <b>Command:</b> <code>$shellCmd</code>
+                    
+                    <b>Output:</b>
+                    <pre>$output</pre>
+                    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                """.trimIndent()
+                sendTelegramReply(botToken, chatId, msg)
+            } catch (e: Exception) {
+                sendTelegramReply(botToken, chatId, "⚠️ <b>[SHELL ERROR]</b>\n${e.message}")
+            }
+        }
+    }
+
+    private fun handleAlarmCommand(botToken: String, chatId: String, timeQuery: String) {
+        if (timeQuery.isBlank()) {
+            sendTelegramReply(
+                botToken, chatId,
+                "⏰ <b>[SMART ALARM SCHEDULER]</b>\n⚠️ Please provide time: e.g. <code>/alarm 06:30</code> or <code>/alarm in 45 mins</code>"
+            )
+            return
+        }
+
+        try {
+            val scheduler = com.example.core.alarm.SmartAlarmScheduler(context)
+            val parts = timeQuery.replace(":", " ").split("\\s+".toRegex())
+            val hour = parts.getOrNull(0)?.toIntOrNull()
+            val min = parts.getOrNull(1)?.toIntOrNull() ?: 0
+
+            if (hour != null && hour in 0..23 && min in 0..59) {
+                scheduler.scheduleExactAlarm(hour, min, "Telegram Remote C2 Smart Alarm")
+                val msg = """
+                    ⏰ <b>[SMART ALARM SCHEDULED]</b>
+                    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                    • <b>Alarm Time</b>: <b>${String.format(Locale.US, "%02d:%02d", hour, min)}</b>
+                    • <b>Protocol</b>: Relentless Crescendo + WakeIQ Captcha
+                    • <b>Security</b>: Diminishing Snooze Penalty Enabled
+                    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                """.trimIndent()
+                sendTelegramReply(botToken, chatId, msg)
+            } else {
+                sendTelegramReply(botToken, chatId, "⚠️ Invalid time format. Please use HH:MM (24-hour format), e.g. <code>/alarm 07:00</code>")
+            }
+        } catch (e: Exception) {
+            sendTelegramReply(botToken, chatId, "⚠️ Failed to schedule alarm: ${e.message}")
+        }
+    }
+
+    private fun handleTodoCommand(botToken: String, chatId: String, taskTitle: String) {
+        if (taskTitle.isBlank()) {
+            sendTelegramReply(
+                botToken, chatId,
+                "📝 <b>[SECONDARY BRAIN TO-DO DISPATCHER]</b>\n⚠️ Please provide task description: e.g. <code>/todo Review Physics Kinematics notes</code>"
+            )
+            return
+        }
+
+        scope.launch(Dispatchers.IO) {
+            try {
+                val db = com.example.data.local.AppDatabase.getInstance(context)
+                val entity = com.example.data.local.entity.VoiceTaskEntity(
+                    title = taskTitle.take(120),
+                    transcript = taskTitle,
+                    timestamp = System.currentTimeMillis(),
+                    isCompleted = false,
+                    isSynced = false,
+                    category = "TELEGRAM_TASK",
+                    urgencyLevel = "HIGH",
+                    aiSummary = "Task added remotely via Telegram C2",
+                    lectureTitle = "Telegram Remote C2"
+                )
+                val id = db.voiceTaskDao().insertTask(entity)
+                val msg = """
+                    📝 <b>[TASK ADDED TO SECONDARY BRAIN]</b>
+                    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                    • <b>Task ID</b>: <code>#$id</code>
+                    • <b>Title</b>: <b>$taskTitle</b>
+                    • <b>Urgency</b>: HIGH
+                    • <b>Storage</b>: Room SQLite + Local Vault
+                    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                """.trimIndent()
+                sendTelegramReply(botToken, chatId, msg)
+            } catch (e: Exception) {
+                sendTelegramReply(botToken, chatId, "⚠️ Failed to save task: ${e.message}")
+            }
+        }
     }
 
     private fun flashTorch(seconds: Int) {

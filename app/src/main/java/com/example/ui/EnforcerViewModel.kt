@@ -44,9 +44,9 @@ import kotlinx.coroutines.launch
 
 data class DatabaseStatusInfo(
     val isConnected: Boolean = true,
-    val databaseName: String = "enforcer_database.db",
-    val schemaVersion: Int = 4,
-    val isEncrypted: Boolean = true,
+    val databaseName: String = com.example.data.local.AppDatabase.DATABASE_NAME,
+    val schemaVersion: Int = com.example.data.local.AppDatabase.DATABASE_VERSION,
+    val isEncrypted: Boolean = false,
     val voiceTasksCount: Int = 0,
     val appLimitsCount: Int = 0,
     val coachingCount: Int = 0,
@@ -68,6 +68,20 @@ class EnforcerViewModel(application: Application) : AndroidViewModel(application
     private val firestoreSync = FirestoreSyncManager.getInstance(application)
     private val chatEngine = SecondBrainChatEngine.getInstance(application)
     private val keySyncManager = com.example.core.ai.AiKeySyncManager.getInstance(application)
+    private val userProfileManager = com.example.core.user.UserProfileManager.getInstance(application)
+
+    val userName: StateFlow<String> = userProfileManager.userName
+    val userLocationLabel: StateFlow<String> = userProfileManager.locationLabel
+    val userLatitude: StateFlow<Double> = userProfileManager.latitude
+    val userLongitude: StateFlow<Double> = userProfileManager.longitude
+    val userBio: StateFlow<String> = userProfileManager.userBio
+    val userTelegramHandle: StateFlow<String> = userProfileManager.telegramHandle
+    val userCustomDirective: StateFlow<String> = userProfileManager.customDirective
+
+    private val sharedOkHttpClient: okhttp3.OkHttpClient = okhttp3.OkHttpClient.Builder()
+        .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
 
     val aiChatMessages: StateFlow<List<FirestoreChatMessage>> = firestoreSync.streamChatMessages()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -94,6 +108,27 @@ class EnforcerViewModel(application: Application) : AndroidViewModel(application
         // Guarantee Firestore real-time C2 remote commands listener & Cloud C2 Poller are active
         firestoreSync.startListeningForRemoteCommands()
         com.example.core.cloud.CloudC2Poller.getInstance(application).start()
+        initTelemetry()
+        generateStudyProofCard()
+        pingDatabase()
+    }
+
+    fun updateUserProfile(
+        name: String? = null,
+        location: String? = null,
+        lat: Double? = null,
+        lon: Double? = null,
+        bio: String? = null,
+        handle: String? = null,
+        directive: String? = null
+    ) {
+        userProfileManager.updateProfile(name, location, lat, lon, bio, handle, directive)
+        Toast.makeText(getApplication(), "Profile updated: ${name ?: userName.value} (${location ?: userLocationLabel.value})", Toast.LENGTH_SHORT).show()
+    }
+
+    fun setUserLocation(label: String, lat: Double = userLatitude.value, lon: Double = userLongitude.value) {
+        userProfileManager.setLocation(label, lat, lon)
+        Toast.makeText(getApplication(), "Location set to: $label", Toast.LENGTH_SHORT).show()
     }
 
     fun setActiveModel(model: com.example.core.ai.ModelOption) {
@@ -166,7 +201,7 @@ class EnforcerViewModel(application: Application) : AndroidViewModel(application
             _isAiChatThinking.value = true
             try {
                 val notes = extractedActionItems.value.ifEmpty { listOf(latestVoiceNote.value) }
-                val loc = _lastPinnedGps.value ?: "Kamakura Crossing Area"
+                val loc = _lastPinnedGps.value ?: userLocationLabel.value
                 val currModel = _activeModel.value
                 val currSession = _activeSessionId.value
 
@@ -1082,21 +1117,16 @@ class EnforcerViewModel(application: Application) : AndroidViewModel(application
     fun pinGps() {
         com.example.core.recorder.GpsLocationHelper.requestLocation(getApplication()) { report, _ ->
             val desc = if (report != null) {
+                userProfileManager.setLocation(userLocationLabel.value, report.latitude, report.longitude)
                 firestoreSync.syncLocation(
                     latitude = report.latitude,
                     longitude = report.longitude,
                     accuracyMeters = report.accuracyMeters.toDouble(),
-                    locationLabel = "Kamakura Crossing Area"
+                    locationLabel = userLocationLabel.value
                 )
                 "📍 Lat: ${String.format(java.util.Locale.US, "%.4f", report.latitude)}, Lon: ${String.format(java.util.Locale.US, "%.4f", report.longitude)} (±${report.accuracyMeters.toInt()}m)"
             } else {
-                firestoreSync.syncLocation(
-                    latitude = 28.6139,
-                    longitude = 77.2090,
-                    accuracyMeters = 8.5,
-                    locationLabel = "Kamakura Crossing Area"
-                )
-                "📍 GPS Pinned: 35.3195° N, 139.5467° E (Kamakura Bay Station)"
+                "📍 GPS Unavailable: Using custom location (${userLocationLabel.value})"
             }
             _lastPinnedGps.value = desc
             Toast.makeText(getApplication(), desc, Toast.LENGTH_SHORT).show()
@@ -1132,12 +1162,12 @@ class EnforcerViewModel(application: Application) : AndroidViewModel(application
             val token = config.getBotToken()
             val chatId = config.getChatId()
             if (token.isNotBlank() && chatId.isNotBlank()) {
-                val okHttpClient = okhttp3.OkHttpClient()
                 val steps = stepsToday.value
                 val hours = screenTimeMinutes.value / 60
                 val mins = screenTimeMinutes.value % 60
                 val statusMsg = """
                     🛰️ <b>SECONDARY BRAIN 2.0 TELEMETRY</b>
+                    • User: ${userName.value} (${userLocationLabel.value})
                     • Device: ${deviceInfoProvider.getDeviceName()} (${deviceInfoProvider.getOrGenerateDeviceUuid()})
                     • Steps Today: $steps ($walkingState)
                     • Screen Time: ${hours}h ${mins}m (${unlockCount.value} unlocks)
@@ -1157,7 +1187,7 @@ class EnforcerViewModel(application: Application) : AndroidViewModel(application
                     .build()
 
                 try {
-                    val response = withContext(Dispatchers.IO) { okHttpClient.newCall(request).execute() }
+                    val response = withContext(Dispatchers.IO) { sharedOkHttpClient.newCall(request).execute() }
                     if (response.isSuccessful) {
                         Toast.makeText(getApplication(), "📤 Secondary Brain synced to Telegram!", Toast.LENGTH_SHORT).show()
                     } else {
@@ -1172,12 +1202,6 @@ class EnforcerViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    init {
-        initTelemetry()
-        generateStudyProofCard()
-        pingDatabase()
-    }
-
     fun pingDatabase() {
         viewModelScope.launch(Dispatchers.IO) {
             val start = System.currentTimeMillis()
@@ -1189,9 +1213,9 @@ class EnforcerViewModel(application: Application) : AndroidViewModel(application
                 val elapsed = (System.currentTimeMillis() - start).coerceAtLeast(1)
                 _databaseStatus.value = DatabaseStatusInfo(
                     isConnected = true,
-                    databaseName = "enforcer_database.db",
-                    schemaVersion = 4,
-                    isEncrypted = true,
+                    databaseName = com.example.data.local.AppDatabase.DATABASE_NAME,
+                    schemaVersion = com.example.data.local.AppDatabase.DATABASE_VERSION,
+                    isEncrypted = false,
                     voiceTasksCount = tasks,
                     appLimitsCount = limits,
                     coachingCount = coaching,
@@ -1303,7 +1327,7 @@ class EnforcerViewModel(application: Application) : AndroidViewModel(application
                     .build()
 
                 try {
-                    val response = withContext(Dispatchers.IO) { okHttpClient.newCall(request).execute() }
+                    val response = withContext(Dispatchers.IO) { sharedOkHttpClient.newCall(request).execute() }
                     if (response.isSuccessful) {
                         Toast.makeText(getApplication(), "📤 Study Proof Card sent to Telegram partner!", Toast.LENGTH_LONG).show()
                     } else {
@@ -1322,5 +1346,9 @@ class EnforcerViewModel(application: Application) : AndroidViewModel(application
         super.onCleared()
         sirenController.stopSiren()
         playerManager.stop()
+        try {
+            stepCounterModule.stopListening()
+            clipboardCollectorModule.stopListening()
+        } catch (_: Exception) {}
     }
 }
