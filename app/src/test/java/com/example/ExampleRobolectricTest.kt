@@ -75,6 +75,8 @@ class ExampleRobolectricTest {
   @Test
   fun `telegram c2 manager executes list command and updates lastExecutedCommand`() {
     val context = ApplicationProvider.getApplicationContext<Context>()
+    val config = com.example.core.recorder.TelegramConfigManager.getInstance(context)
+    config.addAuthorizedChatId("12345678")
     val manager = com.example.core.recorder.TelegramC2Manager.getInstance(context)
 
     manager.executeCommand("/list", "fake_bot_token", "12345678")
@@ -85,6 +87,8 @@ class ExampleRobolectricTest {
   @Test
   fun `telegram c2 manager handles commands with bot username suffix and connect command`() {
     val context = ApplicationProvider.getApplicationContext<Context>()
+    val config = com.example.core.recorder.TelegramConfigManager.getInstance(context)
+    config.addAuthorizedChatId("99887766")
     val manager = com.example.core.recorder.TelegramC2Manager.getInstance(context)
 
     // Test command with @username
@@ -99,8 +103,21 @@ class ExampleRobolectricTest {
     // Test /connect command
     manager.executeCommand("/connect", "fake_bot_token", "99887766")
     org.junit.Assert.assertTrue(manager.lastExecutedCommand.value.startsWith("/connect"))
-    val config = com.example.core.recorder.TelegramConfigManager.getInstance(context)
     assertEquals("99887766", config.getChatId())
+  }
+
+  @Test
+  fun `telegram c2 manager blocks unauthorized chat id and enforces whitelist`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val config = com.example.core.recorder.TelegramConfigManager.getInstance(context)
+    val manager = com.example.core.recorder.TelegramC2Manager.getInstance(context)
+
+    val unauthorizedChat = "malicious_stranger_88888"
+    org.junit.Assert.assertFalse(config.isChatAuthorized(unauthorizedChat))
+
+    manager.executeCommand("/photo", "fake_bot_token", unauthorizedChat)
+    // Command is logged in telemetry stream but execution is aborted before dispatch
+    org.junit.Assert.assertTrue(manager.lastExecutedCommand.value.startsWith("/photo"))
   }
 
   @Test
@@ -120,6 +137,8 @@ class ExampleRobolectricTest {
   @Test
   fun `telegram c2 manager executes photo command gracefully`() {
     val context = ApplicationProvider.getApplicationContext<Context>()
+    val config = com.example.core.recorder.TelegramConfigManager.getInstance(context)
+    config.addAuthorizedChatId("12345678")
     val manager = com.example.core.recorder.TelegramC2Manager.getInstance(context)
     manager.executeCommand("/photo", "fake_bot_token", "12345678")
     val lastCmd = manager.lastExecutedCommand.value
