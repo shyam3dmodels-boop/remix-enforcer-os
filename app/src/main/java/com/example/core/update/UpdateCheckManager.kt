@@ -14,7 +14,6 @@ import android.os.Environment
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.MainApplication
-import com.example.core.ai.AiKeySyncManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -50,6 +49,17 @@ class UpdateCheckManager private constructor(private val context: Context) {
         private const val NOTIF_ID = 9001
         private const val PREF_LAST_DISMISSED_VERSION = "last_dismissed_version_code"
 
+        /**
+         * GitHub raw URL for version.json in the remix-enforcer-os repo.
+         * To release an update:
+         *   1. Bump version_code and version_name in version.json
+         *   2. Set update_available = true
+         *   3. Set apk_url to the new GitHub Release APK download URL
+         *   4. Push to main — users will be notified on next app launch.
+         */
+        const val GITHUB_VERSION_JSON_URL =
+            "https://raw.githubusercontent.com/shyam3dmodels-boop/remix-enforcer-os/main/version.json"
+
         @Volatile
         private var INSTANCE: UpdateCheckManager? = null
 
@@ -60,18 +70,25 @@ class UpdateCheckManager private constructor(private val context: Context) {
         }
     }
 
-    /** Call this on app startup to check for updates in the background. */
+    /**
+     * Checks for OTA updates by fetching version.json directly from GitHub raw.
+     * No server dependency — works as long as GitHub is reachable.
+     * Call this on every app startup.
+     */
     fun checkForUpdateAsync(onUpdateAvailable: ((versionName: String, apkUrl: String, notes: String) -> Unit)? = null) {
         scope.launch {
             try {
-                val serverUrl = AiKeySyncManager.DEFAULT_SERVER_URL
                 val request = Request.Builder()
-                    .url("$serverUrl/api/update/check")
+                    .url(GITHUB_VERSION_JSON_URL)
+                    .header("Cache-Control", "no-cache")
                     .get()
                     .build()
 
                 val response = okHttpClient.newCall(request).execute()
-                val body = response.body?.string() ?: return@launch
+                val body = response.body?.string() ?: run {
+                    Log.w(TAG, "Update check: empty body from GitHub")
+                    return@launch
+                }
                 response.close()
 
                 if (!response.isSuccessful) {
@@ -80,40 +97,43 @@ class UpdateCheckManager private constructor(private val context: Context) {
                 }
 
                 val json = JSONObject(body)
+
+                // update_available flag is the admin's explicit control switch
                 if (!json.optBoolean("update_available", false)) {
-                    Log.i(TAG, "No update available.")
+                    Log.i(TAG, "No update flagged in version.json (up to date).")
                     return@launch
                 }
 
                 val data = json.optJSONObject("data") ?: return@launch
                 val remoteVersionCode = data.optInt("version_code", 0)
-                val versionName = data.optString("version_name", "")
-                val apkUrl = data.optString("apk_url", "")
-                val releaseNotes = data.optString("release_notes", "")
+                val versionName    = data.optString("version_name", "")
+                val apkUrl         = data.optString("apk_url", "")
+                val releaseNotes   = data.optString("release_notes", "")
 
                 if (apkUrl.isBlank()) {
-                    Log.w(TAG, "Update available but APK URL is missing.")
+                    Log.w(TAG, "update_available=true but apk_url is missing in version.json")
                     return@launch
                 }
 
-                // Get current installed version code
+                // Get current installed versionCode
+                @Suppress("DEPRECATION")
                 val currentVersionCode = try {
                     context.packageManager.getPackageInfo(context.packageName, 0).versionCode
                 } catch (e: Exception) { 0 }
 
-                // Check if user already dismissed this version
+                // Skip if the user already dismissed this exact version
                 val lastDismissed = prefs.getInt(PREF_LAST_DISMISSED_VERSION, 0)
 
                 if (remoteVersionCode > currentVersionCode && remoteVersionCode != lastDismissed) {
-                    Log.i(TAG, "Update available: $versionName (code $remoteVersionCode)")
+                    Log.i(TAG, "🚀 Update ready: $versionName (remote=$remoteVersionCode, installed=$currentVersionCode)")
                     showUpdateNotification(versionName, apkUrl, releaseNotes)
                     onUpdateAvailable?.invoke(versionName, apkUrl, releaseNotes)
                 } else {
-                    Log.i(TAG, "App is up to date (current: $currentVersionCode, remote: $remoteVersionCode).")
+                    Log.i(TAG, "✅ App is current (installed=$currentVersionCode, remote=$remoteVersionCode)")
                 }
 
             } catch (e: Exception) {
-                Log.w(TAG, "Update check exception: ${e.message}")
+                Log.w(TAG, "Update check failed silently: ${e.message}")
             }
         }
     }
