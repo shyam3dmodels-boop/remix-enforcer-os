@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Enforcer Shield Outer Outline -->
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M54,26 L76,35 C76,55 67,71 54,80 C41,71 32,55 32,35 Z" />
+    <path
+        android:fillColor="#0D1117"
+        android:pathData="M54,30 L72,37.5 C72,53.5 64.5,67 54,75 C43.5,67 36,53.5 36,37.5 Z" />
+    <!-- Center Tech Clock & Lightning Tick -->
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M54,40 C60.6,40 66,45.4 66,52 C66,58.6 60.6,64 54,64 C47.4,64 42,58.6 42,52 C42,45.4 47.4,40 54,40 Z" />
+    <!-- Clock Hands / Crosshair -->
+    <path
+        android:fillColor="#0D1117"
+        android:pathData="M52,43 L56,43 L56,53 L62,56 L60,59 L52,54 Z" />
+    <!-- Tech Accent Dots -->
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M54,34 A2,2 0 1,0 54,38 A2,2 0 1,0 54,34 Z" />
+</vector>

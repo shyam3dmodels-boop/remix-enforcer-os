@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Secondary Brain</string>
+    <string name="mobile_claw_service_label">MobileClaw Agent Automation</string>
+    <string name="mobile_claw_accessibility_description">Enables autonomous MobileClaw agent orchestration, remote screen interaction, gesture dispatching, and UI hierarchy inspection for Secondary Brain 2.0.</string>
+</resources>

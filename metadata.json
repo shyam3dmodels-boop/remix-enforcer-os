@@ -1,0 +1,8 @@
+{
+  "name": "Secondary Brain 2.0",
+  "description": "All-in-one personal life telemetry hub, central manager dashboard, and zero-retention AI memory assistant featuring ultra-low-power background sensors, liquid glass UI, and voice note transcription.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

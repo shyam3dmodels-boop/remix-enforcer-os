@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "435847849699",
+    "project_id": "android-1a887",
+    "storage_bucket": "android-1a887.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:435847849699:android:b2a59a7f34c2b9a1",
+        "android_client_info": {
+          "package_name": "com.aistudio.enforcer.vhudxn"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDummyFirestoreClientKeyForAndroid"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
