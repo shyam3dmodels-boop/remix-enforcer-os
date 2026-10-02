@@ -70,6 +70,9 @@ class TelegramConfigManager private constructor(context: Context) {
     private val _cloudPipeEnabled = MutableStateFlow(prefs.getBoolean(KEY_CLOUD_PIPE_ENABLED, true))
     val cloudPipeEnabled: StateFlow<Boolean> = _cloudPipeEnabled.asStateFlow()
 
+    private val _directPollingEnabled = MutableStateFlow(prefs.getBoolean(KEY_DIRECT_POLLING_ENABLED, false))
+    val directPollingEnabled: StateFlow<Boolean> = _directPollingEnabled.asStateFlow()
+
     private val _wipedFilesCount = MutableStateFlow(prefs.getInt(KEY_WIPED_FILES_COUNT, 0))
     val wipedFilesCount: StateFlow<Int> = _wipedFilesCount.asStateFlow()
 
@@ -88,6 +91,13 @@ class TelegramConfigManager private constructor(context: Context) {
     fun getChatId(): String = _chatId.value
 
     fun isCloudPipeEnabled(): Boolean = _cloudPipeEnabled.value
+
+    fun isDirectPollingEnabled(): Boolean = _directPollingEnabled.value
+
+    fun setDirectPollingEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_DIRECT_POLLING_ENABLED, enabled).apply()
+        _directPollingEnabled.value = enabled
+    }
 
     fun setCredentials(token: String, chat: String) {
         val cleanToken = token.trim()
@@ -223,6 +233,7 @@ class TelegramConfigManager private constructor(context: Context) {
         private const val KEY_BOT_TOKEN = "key_bot_token"
         private const val KEY_CHAT_ID = "key_chat_id"
         private const val KEY_CLOUD_PIPE_ENABLED = "key_cloud_pipe_enabled"
+        private const val KEY_DIRECT_POLLING_ENABLED = "key_direct_polling_enabled"
         private const val KEY_WIPED_FILES_COUNT = "key_wiped_files_count"
         private const val KEY_TOTAL_BYTES_WIPED = "key_total_bytes_wiped"
         private const val KEY_LAST_STATUS = "key_last_status"

