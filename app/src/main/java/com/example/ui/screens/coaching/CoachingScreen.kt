@@ -120,7 +120,7 @@ fun CoachingScreen(
         // Title Header
         Column {
             Text(
-                text = "FOCUS ROUTINES & CHECKLIST",
+                text = "HABIT ENGINE & CHECKLIST",
                 style = MaterialTheme.typography.headlineMedium,
                 color = CyberCyan
             )

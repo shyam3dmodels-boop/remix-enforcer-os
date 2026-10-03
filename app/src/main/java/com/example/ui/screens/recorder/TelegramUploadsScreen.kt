@@ -632,34 +632,6 @@ fun TelegramUploadsScreen(
                                 }
                             }
                         }
-
-                        // Recent Log View
-                        if (telegramCommandLogs.isNotEmpty()) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(CyberBg)
-                                    .padding(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Text(
-                                    text = "LIVE AUDIT FEED (C2):",
-                                    fontFamily = FontFamily.Monospace,
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = CyberTextMuted
-                                )
-                                telegramCommandLogs.take(4).forEach { logLine ->
-                                    Text(
-                                        text = logLine,
-                                        fontFamily = FontFamily.Monospace,
-                                        fontSize = 10.sp,
-                                        color = if (logLine.contains("Received")) CyberGreen else CyberTextSecondary
-                                    )
-                                }
-                            }
-                        }
                     }
                 }
             }

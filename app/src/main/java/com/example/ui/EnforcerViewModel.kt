@@ -195,7 +195,36 @@ class EnforcerViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun sendAiChatMessage(userMessage: String) {
+    private val _isTelemetryConnectorEnabled = MutableStateFlow(false)
+    val isTelemetryConnectorEnabled: StateFlow<Boolean> = _isTelemetryConnectorEnabled.asStateFlow()
+
+    fun toggleTelemetryConnector() {
+        val next = !_isTelemetryConnectorEnabled.value
+        _isTelemetryConnectorEnabled.value = next
+        val label = if (next) "🔗 Device Telemetry Connector ENABLED (Location & Hardware Grounded)" else "🔒 Clean Privacy Mode (Zero Location/Telemetry Sent)"
+        Toast.makeText(getApplication(), label, Toast.LENGTH_SHORT).show()
+    }
+
+    fun saveUniversalApiKey(pastedKey: String, onDetected: ((com.example.core.ai.DetectedKeyInfo) -> Unit)? = null) {
+        val trimmed = pastedKey.trim()
+        if (trimmed.isBlank()) return
+        val detected = com.example.core.ai.AiKeyDetector.detectProvider(trimmed)
+        viewModelScope.launch {
+            keySyncManager.saveKeyAndSync(
+                provider = detected.provider,
+                apiKey = trimmed,
+                selectedModel = detected.defaultModel
+            )
+            val matchedModel = com.example.core.ai.AiKeySyncManager.AVAILABLE_MODELS.firstOrNull { it.provider == detected.provider }
+            if (matchedModel != null) {
+                _activeModel.value = matchedModel
+            }
+            onDetected?.invoke(detected)
+            Toast.makeText(getApplication(), "Saved & Activated ${detected.displayName} Key!", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun sendAiChatMessage(userMessage: String, forceAttachTelemetry: Boolean? = null) {
         if (userMessage.isBlank()) return
         viewModelScope.launch {
             _isAiChatThinking.value = true
@@ -204,6 +233,7 @@ class EnforcerViewModel(application: Application) : AndroidViewModel(application
                 val loc = _lastPinnedGps.value ?: userLocationLabel.value
                 val currModel = _activeModel.value
                 val currSession = _activeSessionId.value
+                val attachTelemetry = forceAttachTelemetry ?: _isTelemetryConnectorEnabled.value
 
                 chatEngine.processUserMessage(
                     sessionId = currSession,
@@ -216,7 +246,8 @@ class EnforcerViewModel(application: Application) : AndroidViewModel(application
                     batteryCharging = batteryStatus.value.isCharging,
                     screenTimeMins = screenTimeMinutes.value,
                     locationLabel = loc,
-                    recentNotes = notes
+                    recentNotes = notes,
+                    includeTelemetryGrounding = attachTelemetry
                 )
 
                 // Refresh local session messages

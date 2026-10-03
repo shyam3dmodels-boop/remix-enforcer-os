@@ -1237,7 +1237,7 @@ fun RecordLectureTab(
                         if (coachingList.isNotEmpty()) {
                             Column {
                                 Text(
-                                    text = "Link to Focus Routine",
+                                    text = "Link to Study Unit / Class",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = CyberTextSecondary
                                 )

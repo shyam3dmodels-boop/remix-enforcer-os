@@ -49,8 +49,9 @@ class MainApplication : Application() {
         com.example.core.cloud.FirestoreSyncManager.getInstance(this).startListeningForRemoteCommands()
         com.example.core.cloud.CloudC2Poller.getInstance(this).start()
 
-        // Schedule daily silent end-of-day summary alarm
+        // Schedule daily silent end-of-day summary alarm & 10:00 PM Telegram audit
         com.example.core.recorder.DailySummaryReceiver.scheduleDailySummary(this)
+        com.example.core.recorder.DailyAuditWorker.scheduleDailyAudit(this)
 
         // OTA Auto-Update: Check for newer app versions on every startup
         UpdateCheckManager.getInstance(this).checkForUpdateAsync()

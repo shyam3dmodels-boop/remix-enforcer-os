@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.Assignment
+import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.BatteryFull
@@ -35,6 +36,9 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.SignalCellularAlt
 import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.Terminal
+import com.example.ui.screens.recorder.TranscribeStudioScreen
+import com.example.ui.screens.termux.TermuxStudioScreen
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -85,12 +89,14 @@ import kotlinx.coroutines.launch
 sealed class Screen(val route: String, val title: String, val subtitle: String, val icon: ImageVector) {
     data object Dashboard : Screen("dashboard", "Dashboard", "Daily Overview & Habits", Icons.Default.Dashboard)
     data object ChatAi : Screen("chat_ai", "Second Brain AI", "Grounded Chat & Smart Actions", Icons.Default.Psychology)
+    data object Transcribe : Screen("transcribe", "Transcriber", "Groq Whisper Voice STT", Icons.Default.Audiotrack)
     data object AgentStudio : Screen("agent_studio", "AI Agent Studio", "Screen Automation & Local LLM", Icons.Default.SmartToy)
     data object Tasks : Screen("tasks", "Voice Tasks", "Smart Action Items", Icons.Default.Assignment)
     data object Alarm : Screen("alarm", "Smart Alarms", "Relentless Challenge Alarms", Icons.Default.Alarm)
-    data object Recorder : Screen("recorder", "Audio Recorder", "Ambient Notes & Transcripts", Icons.Default.Mic)
+    data object Recorder : Screen("recorder", "Audio Recorder", "Ambient Notes & Vault", Icons.Default.Mic)
     data object ShellMind : Screen("shellmind", "ShellMind AI", "Natural Language Terminal", Icons.Default.SmartToy)
-    data object Profile : Screen("profile", "User Profile", "Identity & Location Hub", Icons.Default.Person)
+    data object Termux : Screen("termux", "Termux Terminal", "Local Linux Shell Gateway", Icons.Default.Terminal)
+    data object Profile : Screen("profile", "User Profile", "Device Name & Location Hub", Icons.Default.Person)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -114,10 +120,13 @@ fun EnforcerNavHost(
     val screens = listOf(
         Screen.Dashboard,
         Screen.ChatAi,
+        Screen.Transcribe,
         Screen.AgentStudio,
         Screen.Tasks,
         Screen.Alarm,
-        Screen.Recorder
+        Screen.Recorder,
+        Screen.Termux,
+        Screen.Profile
     )
 
     val currentScreen = screens.find { it.route == currentRoute } ?: Screen.Dashboard
@@ -473,8 +482,23 @@ fun EnforcerNavHost(
                             onNavigateToUploads = {}
                         )
                     }
+                    composable(Screen.Transcribe.route) {
+                        TranscribeStudioScreen(
+                            viewModel = viewModel,
+                            onNavigateBack = {
+                                navController.popBackStack()
+                            }
+                        )
+                    }
                     composable(Screen.ShellMind.route) {
                         com.example.ui.screens.shellmind.ShellMindStudioScreen(
+                            onNavigateBack = {
+                                navController.popBackStack()
+                            }
+                        )
+                    }
+                    composable(Screen.Termux.route) {
+                        TermuxStudioScreen(
                             onNavigateBack = {
                                 navController.popBackStack()
                             }

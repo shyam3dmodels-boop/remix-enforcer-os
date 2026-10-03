@@ -117,6 +117,7 @@ fun ChatAiScreen(
     val activeModel by viewModel.activeModel.collectAsState()
     val activeSessionId by viewModel.activeSessionId.collectAsState()
     val isAiThinking by viewModel.isAiChatThinking.collectAsState()
+    val isConnectorEnabled by viewModel.isTelemetryConnectorEnabled.collectAsState()
     val steps by viewModel.stepsToday.collectAsState()
     val batteryStatus by viewModel.batteryStatus.collectAsState()
 
@@ -440,10 +441,25 @@ fun ChatAiScreen(
                             }
                         }
 
-                        // Telemetry Grounding Indicator Pill
+                        // Telemetry Connector Toggle Pill (Privacy-First)
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = if (isAgentMode) Color(0xFF0D9488).copy(alpha = 0.15f) else PaletteMintFrost.copy(alpha = 0.70f)
+                            color = if (isConnectorEnabled) {
+                                if (isAgentMode) Color(0xFF0D9488).copy(alpha = 0.15f) else PaletteMintFrost.copy(alpha = 0.85f)
+                            } else {
+                                Color.LightGray.copy(alpha = 0.25f)
+                            },
+                            border = BorderStroke(
+                                1.dp,
+                                if (isConnectorEnabled) {
+                                    if (isAgentMode) Color(0xFF0D9488).copy(alpha = 0.5f) else PaletteCornflower.copy(alpha = 0.5f)
+                                } else {
+                                    Color.LightGray.copy(alpha = 0.4f)
+                                }
+                            ),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { viewModel.toggleTelemetryConnector() }
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -451,19 +467,35 @@ fun ChatAiScreen(
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 Icon(
-                                    imageVector = if (isAgentMode) Icons.Default.Bolt else Icons.Default.AutoAwesome,
-                                    contentDescription = "Grounded",
-                                    tint = if (isAgentMode) Color(0xFF0D9488) else PaletteCornflower,
-                                    modifier = Modifier.size(11.dp)
+                                    imageVector = if (isConnectorEnabled) {
+                                        if (isAgentMode) Icons.Default.Bolt else Icons.Default.AutoAwesome
+                                    } else {
+                                        Icons.Default.LocationOn
+                                    },
+                                    contentDescription = "Telemetry Connector",
+                                    tint = if (isConnectorEnabled) {
+                                        if (isAgentMode) Color(0xFF0D9488) else PaletteCornflower
+                                    } else {
+                                        Color.Gray
+                                    },
+                                    modifier = Modifier.size(12.dp)
                                 )
                                 Text(
-                                    text = "$steps steps • ${batteryStatus.percent}%",
+                                    text = if (isConnectorEnabled) {
+                                        "🔗 Connector: ON ($steps stp • ${batteryStatus.percent}%)"
+                                    } else {
+                                        "🔒 Connector: OFF"
+                                    },
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         fontFamily = FontFamily.Monospace,
-                                        fontSize = 10.sp,
+                                        fontSize = 9.sp,
                                         fontWeight = FontWeight.SemiBold
                                     ),
-                                    color = if (isAgentMode) Color(0xFF0D9488) else PaletteCornflower
+                                    color = if (isConnectorEnabled) {
+                                        if (isAgentMode) Color(0xFF0D9488) else PaletteCornflower
+                                    } else {
+                                        Color.Gray
+                                    }
                                 )
                             }
                         }
@@ -687,12 +719,12 @@ fun ChatAiScreen(
             )
         }
 
-        // --- AI Keys & Settings Modal ---
+        // --- Universal AI Key Vault & Settings Modal ---
         if (showSettingsDialog) {
-            AiKeysSettingsDialog(
+            UniversalAiKeyVaultDialog(
                 allKeys = allKeys,
                 activeModel = activeModel,
-                onSaveKey = { prov, key, model -> viewModel.saveAiKey(prov, key, model) },
+                onSaveUniversalKey = { key -> viewModel.saveUniversalApiKey(key) },
                 onDeleteKey = { viewModel.deleteAiKey(it) },
                 onSyncWithServer = { viewModel.syncKeysWithServer() },
                 onBackupToTelegram = { viewModel.backupCurrentSessionToTelegram() },
@@ -1315,31 +1347,21 @@ private fun PreviousChatsDrawer(
 }
 
 @Composable
-private fun AiKeysSettingsDialog(
+private fun UniversalAiKeyVaultDialog(
     allKeys: List<AiKeyEntity>,
     activeModel: ModelOption,
-    onSaveKey: (provider: String, key: String, model: String) -> Unit,
+    onSaveUniversalKey: (key: String) -> Boolean,
     onDeleteKey: (provider: String) -> Unit,
     onSyncWithServer: () -> Unit,
     onBackupToTelegram: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val providers = listOf(
-        ProviderKeyField("claude", "Anthropic Claude Key", "sk-ant-api03-...", "claude-3-5-sonnet-20241022", "✨"),
-        ProviderKeyField("gemini", "Google Gemini Key", "AIzaSy...", "gemini-2.0-flash", "🌟"),
-        ProviderKeyField("deepseek", "DeepSeek API Key", "sk-...", "deepseek-chat", "🔵"),
-        ProviderKeyField("nvidia", "NVIDIA NIM Key", "nvapi-...", "nvidia/llama-3.1-nemotron-70b-instruct", "🟢"),
-        ProviderKeyField("openrouter", "OpenRouter Key", "sk-or-v1-...", "anthropic/claude-3.5-sonnet", "🟣"),
-        ProviderKeyField("groq", "Groq Cloud Key", "gsk_...", "llama-3.3-70b-versatile", "⚡")
-    )
+    var pastedKey by remember { mutableStateOf("") }
+    var saveStatusMessage by remember { mutableStateOf<String?>(null) }
+    var isSuccess by remember { mutableStateOf(false) }
 
-    val keyValues = remember {
-        mutableStateOf(
-            providers.associate { p ->
-                val existing = allKeys.firstOrNull { it.provider.equals(p.id, ignoreCase = true) }
-                p.id to (existing?.apiKey ?: "")
-            }.toMutableMap()
-        )
+    val detectedProvider = remember(pastedKey) {
+        if (pastedKey.isNotBlank()) com.example.core.ai.AiKeyDetector.detectProvider(pastedKey.trim()) else null
     }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -1364,12 +1386,12 @@ private fun AiKeysSettingsDialog(
                 ) {
                     Column {
                         Text(
-                            text = "AI KEYS & CLOUD SYNC",
+                            text = "UNIVERSAL AI KEY VAULT",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
                             color = PaletteCornflower
                         )
                         Text(
-                            text = "Saved in Room DB • Synced to Server & Firestore",
+                            text = "Auto-detects 11+ Providers from 1 Single Input",
                             style = MaterialTheme.typography.labelSmall,
                             color = KamakuraTextSecondary
                         )
@@ -1427,106 +1449,220 @@ private fun AiKeysSettingsDialog(
                 Divider(color = Color.LightGray.copy(alpha = 0.3f))
                 Spacer(modifier = Modifier.height(8.dp))
 
+                // Single Universal Input Field
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color(0xFFF8FAFC),
+                    border = BorderStroke(1.5.dp, PaletteCornflower.copy(alpha = 0.4f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "🔑 Paste Any AI API Key",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = PaletteCornflower
+                            )
+
+                            if (detectedProvider != null) {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = PaletteCornflower.copy(alpha = 0.15f)
+                                ) {
+                                    Text(
+                                        text = "${detectedProvider.emoji} ${detectedProvider.name}",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontSize = 11.sp
+                                        ),
+                                        color = PaletteCornflower,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        OutlinedTextField(
+                            value = pastedKey,
+                            onValueChange = {
+                                pastedKey = it
+                                saveStatusMessage = null
+                            },
+                            placeholder = {
+                                Text(
+                                    "Paste Claude (sk-ant-...), Gemini (AIzaSy...), Groq (gsk_...), OpenAI, OpenRouter, DeepSeek, Cerebras, Fireworks, etc.",
+                                    fontSize = 11.sp,
+                                    color = Color.Gray
+                                )
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = PaletteCornflower,
+                                unfocusedBorderColor = Color.LightGray.copy(alpha = 0.5f),
+                                focusedContainerColor = Color.White,
+                                unfocusedContainerColor = Color.White
+                            )
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (pastedKey.isNotBlank()) {
+                                Text(
+                                    text = "Clear",
+                                    style = MaterialTheme.typography.labelSmall.copy(color = Color.Red.copy(alpha = 0.7f)),
+                                    modifier = Modifier
+                                        .clickable {
+                                            pastedKey = ""
+                                            saveStatusMessage = null
+                                        }
+                                        .padding(4.dp)
+                                )
+                            } else {
+                                Spacer(modifier = Modifier.width(4.dp))
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (pastedKey.isNotBlank()) PaletteCornflower else Color.LightGray,
+                                modifier = Modifier.clickable(enabled = pastedKey.isNotBlank()) {
+                                    val success = onSaveUniversalKey(pastedKey.trim())
+                                    if (success) {
+                                        val detected = com.example.core.ai.AiKeyDetector.detectProvider(pastedKey.trim())
+                                        saveStatusMessage = "✅ Saved & Activated ${detected?.name ?: "Key"}!"
+                                        isSuccess = true
+                                        pastedKey = ""
+                                    } else {
+                                        saveStatusMessage = "❌ Invalid or unparseable API key format"
+                                        isSuccess = false
+                                    }
+                                }
+                            ) {
+                                Text(
+                                    text = "Save & Activate Key",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, color = Color.White),
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
+                                )
+                            }
+                        }
+
+                        if (saveStatusMessage != null) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = saveStatusMessage!!,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 11.sp
+                                ),
+                                color = if (isSuccess) Color(0xFF2E7D32) else Color.Red
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(
+                    text = "ACTIVE SAVED KEYS (${allKeys.size})",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold, letterSpacing = 0.5.sp),
+                    color = KamakuraTextSecondary
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
                 // Scrollable Key Inputs
                 Column(
                     modifier = Modifier
                         .weight(1f)
                         .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    providers.forEach { p ->
-                        val currentVal = keyValues.value[p.id] ?: ""
+                    if (allKeys.isEmpty()) {
                         Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = Color.White,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .border(1.dp, Color.LightGray.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xFFF8FAFC),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Column(modifier = Modifier.padding(10.dp)) {
+                            Box(
+                                modifier = Modifier.padding(20.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "No keys stored. Paste any AI key above to get started.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = KamakuraTextSecondary
+                                )
+                            }
+                        }
+                    } else {
+                        allKeys.forEach { keyEntity ->
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color.White,
+                                border = BorderStroke(1.dp, PaletteIceCyan.copy(alpha = 0.8f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
                                 Row(
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        Text(p.emoji, fontSize = 16.sp)
-                                        Text(
-                                            text = p.name,
-                                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                            color = PaletteCornflower
-                                        )
-                                    }
-                                    if (currentVal.isNotBlank()) {
-                                        Text(
-                                            text = "● Stored",
-                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                            color = Color(0xFF2E7D32)
-                                        )
-                                    } else {
-                                        Text(
-                                            text = "○ Empty",
-                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                            color = Color.Gray
-                                        )
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(4.dp))
-
-                                OutlinedTextField(
-                                    value = currentVal,
-                                    onValueChange = { newVal ->
-                                        val updated = keyValues.value.toMutableMap()
-                                        updated[p.id] = newVal
-                                        keyValues.value = updated
-                                    },
-                                    placeholder = { Text(p.placeholder, fontSize = 11.sp, color = Color.Gray) },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(10.dp),
-                                    singleLine = true,
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedBorderColor = PaletteCornflower,
-                                        unfocusedBorderColor = Color.LightGray.copy(alpha = 0.5f),
-                                        focusedContainerColor = Color.White,
-                                        unfocusedContainerColor = Color.White
-                                    )
-                                )
-
-                                Spacer(modifier = Modifier.height(6.dp))
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.End,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    if (currentVal.isNotBlank()) {
-                                        Text(
-                                            text = "Clear",
-                                            style = MaterialTheme.typography.labelSmall.copy(color = Color.Red.copy(alpha = 0.7f)),
-                                            modifier = Modifier
-                                                .clickable {
-                                                    val updated = keyValues.value.toMutableMap()
-                                                    updated[p.id] = ""
-                                                    keyValues.value = updated
-                                                    onDeleteKey(p.id)
-                                                }
-                                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                    }
-
-                                    Surface(
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = PaletteCornflower,
-                                        modifier = Modifier.clickable {
-                                            onSaveKey(p.id, currentVal, p.defaultModel)
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Text(
+                                                text = keyEntity.provider.uppercase(),
+                                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                                color = PaletteCornflower
+                                            )
+                                            Surface(
+                                                shape = RoundedCornerShape(6.dp),
+                                                color = Color(0xFFE8F5E9)
+                                            ) {
+                                                Text(
+                                                    text = "ACTIVE",
+                                                    style = MaterialTheme.typography.labelSmall.copy(
+                                                        fontSize = 9.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = Color(0xFF2E7D32)
+                                                    ),
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                )
+                                            }
                                         }
-                                    ) {
                                         Text(
-                                            text = "Save & Sync",
-                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, color = Color.White),
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                            text = "Model: ${keyEntity.defaultModel} • Key: ••••••••••${keyEntity.apiKey.takeLast(4)}",
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontSize = 10.sp,
+                                                fontFamily = FontFamily.Monospace
+                                            ),
+                                            color = KamakuraTextSecondary
+                                        )
+                                    }
+
+                                    IconButton(
+                                        onClick = { onDeleteKey(keyEntity.provider) },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = "Delete",
+                                            tint = Color.Red.copy(alpha = 0.7f),
+                                            modifier = Modifier.size(16.dp)
                                         )
                                     }
                                 }
@@ -1562,11 +1698,3 @@ private fun AiKeysSettingsDialog(
         }
     }
 }
-
-data class ProviderKeyField(
-    val id: String,
-    val name: String,
-    val placeholder: String,
-    val defaultModel: String,
-    val emoji: String
-)

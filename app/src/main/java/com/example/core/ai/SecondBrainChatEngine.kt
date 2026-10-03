@@ -60,14 +60,19 @@ class SecondBrainChatEngine private constructor(private val context: Context) {
         provider: String = "claude",
         model: String = "claude-3-5-sonnet-20241022",
         userText: String,
-        stepCount: Int,
-        batteryPercent: Int,
-        batteryCharging: Boolean,
-        screenTimeMins: Int,
-        locationLabel: String,
-        recentNotes: List<String>
+        stepCount: Int = 0,
+        batteryPercent: Int = -1,
+        batteryCharging: Boolean = false,
+        screenTimeMins: Int = 0,
+        locationLabel: String = "",
+        recentNotes: List<String> = emptyList(),
+        includeTelemetryGrounding: Boolean = false
     ): String = withContext(Dispatchers.IO) {
-        val groundingMeta = "steps:$stepCount|battery:$batteryPercent|loc:$locationLabel"
+        val groundingMeta = if (includeTelemetryGrounding) {
+            "steps:$stepCount|battery:$batteryPercent|loc:$locationLabel"
+        } else {
+            "mode:clean_privacy"
+        }
 
         // 1. Ensure Session exists in Room SQLite
         val existingSession = repository.getSessionMessagesDirect(sessionId)
@@ -103,26 +108,36 @@ class SecondBrainChatEngine private constructor(private val context: Context) {
             )
         )
 
-        // 3. Record USER message to Firebase Firestore
+        // 3. Record USER message to Firebase Firestore (without telemetry if connector is off)
+        val firestoreLocation = if (includeTelemetryGrounding) locationLabel else ""
+        val firestoreSteps = if (includeTelemetryGrounding) stepCount else 0
+
         firestoreSync.sendChatMessage(
             chatId = sessionId,
             sender = "USER",
             content = userText,
-            stepsAtTime = stepCount,
-            activeLocation = locationLabel
+            stepsAtTime = firestoreSteps,
+            activeLocation = firestoreLocation
         )
 
         // 4. Build Grounded Context for Selected AI Provider with Tool Capabilities
-        val systemContext = """
-            You are Secondary Brain 2.0, a high-performance personal AI companion.
-            Current Real-Time Grounding Context:
-            - Device Location: $locationLabel
+        val telemetryContext = if (includeTelemetryGrounding) {
+            """
+            Current Real-Time Grounding Context (Connector Enabled):
+            - Device Location: ${locationLabel.ifBlank { "User Profile Location" }}
             - Steps Today: $stepCount steps
-            - Battery Level: $batteryPercent% (Charging: $batteryCharging)
+            - Battery Level: ${if (batteryPercent >= 0) "$batteryPercent%" else "Unknown"} (Charging: $batteryCharging)
             - Screen Usage Today: ${screenTimeMins / 60}h ${screenTimeMins % 60}m
             - Recent Voice Notes & Tasks:
             ${recentNotes.take(5).joinToString("\n") { "  * $it" }}
+            """.trimIndent()
+        } else {
+            ""
+        }
 
+        val systemContext = """
+            You are Secondary Brain 2.0, a high-performance personal AI companion.
+            ${if (telemetryContext.isNotBlank()) "$telemetryContext\n" else ""}
             Autonomous Agent Capabilities:
             You can manage the user's alarms, to-dos, and pinned locations on-device.
             When the user requests an action, execute it clearly and inform them:
@@ -130,7 +145,7 @@ class SecondBrainChatEngine private constructor(private val context: Context) {
             - To add a to-do task: Use format TOOL:ADD_TODO("Task Title")
             - To pin GPS location: Use format TOOL:PIN_LOCATION("Location Label")
 
-            Answer concisely, friendly, and smartly in 2-4 sentences. Leverage the real-time context when relevant.
+            Answer concisely, friendly, and smartly in 2-4 sentences.
         """.trimIndent()
 
         // 5. Generate AI Response via Multi-Provider Dispatcher
@@ -165,8 +180,8 @@ class SecondBrainChatEngine private constructor(private val context: Context) {
             chatId = sessionId,
             sender = "AI",
             content = aiResponse,
-            stepsAtTime = stepCount,
-            activeLocation = locationLabel
+            stepsAtTime = firestoreSteps,
+            activeLocation = firestoreLocation
         )
 
         // 9. Sync message to Server Backend SQLite in background
